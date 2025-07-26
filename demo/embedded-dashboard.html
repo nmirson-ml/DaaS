@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics Platform Demo - Embedded Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .dashboard-container {
+            min-height: 500px;
+            border: 2px dashed #e5e7eb;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+        }
+        
+        .chart-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            margin-bottom: 24px;
+        }
+        
+        .demo-badge {
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <svg class="w-8 h-8 text-blue-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                    <h1 class="text-xl font-bold text-gray-900">Analytics Platform Demo</h1>
+                    <span class="demo-badge ml-3">LIVE DEMO</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button id="refresh-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                        Refresh Data
+                    </button>
+                    <button id="export-btn" class="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                        Export PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Dashboard Title -->
+        <div class="mb-8">
+            <h2 class="text-3xl font-bold text-gray-900 mb-2">E-commerce Sales Dashboard</h2>
+            <p class="text-gray-600">Real-time analytics powered by DuckDB and embedded with our platform</p>
+        </div>
+
+        <!-- Metrics Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Total Revenue</p>
+                        <p class="text-2xl font-bold text-gray-900" id="total-revenue">$0</p>
+                    </div>
+                    <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <span class="text-sm text-green-600">+12.5% from last month</span>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Total Orders</p>
+                        <p class="text-2xl font-bold text-gray-900" id="total-orders">0</p>
+                    </div>
+                    <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <span class="text-sm text-green-600">+8.2% from last month</span>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Avg Order Value</p>
+                        <p class="text-2xl font-bold text-gray-900" id="avg-order-value">$0</p>
+                    </div>
+                    <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <span class="text-sm text-green-600">+2.1% from last month</span>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Active Customers</p>
+                        <p class="text-2xl font-bold text-gray-900" id="active-customers">0</p>
+                    </div>
+                    <div class="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <span class="text-sm text-green-600">+15.3% from last month</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Sales by Category -->
+            <div class="chart-card">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-lg font-semibold text-gray-900">Sales by Category</h3>
+                    <div class="text-sm text-gray-500">DuckDB Query</div>
+                </div>
+                <div style="height: 300px;">
+                    <canvas id="categoryChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Monthly Trends -->
+            <div class="chart-card">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-lg font-semibold text-gray-900">Monthly Sales Trends</h3>
+                    <div class="text-sm text-gray-500">Real-time Data</div>
+                </div>
+                <div style="height: 300px;">
+                    <canvas id="trendsChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Top Products -->
+            <div class="chart-card">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-lg font-semibold text-gray-900">Top Products</h3>
+                    <div class="text-sm text-gray-500">Live Analytics</div>
+                </div>
+                <div style="height: 300px;">
+                    <canvas id="productsChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Geographic Distribution -->
+            <div class="chart-card">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-lg font-semibold text-gray-900">Sales by State</h3>
+                    <div class="text-sm text-gray-500">Embedded Chart</div>
+                </div>
+                <div style="height: 300px;">
+                    <canvas id="geoChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Embedded Dashboard Showcase -->
+        <div class="mt-12">
+            <h3 class="text-2xl font-bold text-gray-900 mb-6">Embedded Dashboard Demo</h3>
+            <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <!-- Dashboard Header -->
+                <div class="bg-gray-50 px-6 py-4 border-b border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <div class="flex space-x-2">
+                                <div class="w-3 h-3 bg-red-500 rounded-full"></div>
+                                <div class="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                                <div class="w-3 h-3 bg-green-500 rounded-full"></div>
+                            </div>
+                            <span class="ml-4 text-sm text-gray-600">analytics.yourapp.com/dashboard/demo</span>
+                        </div>
+                        <div class="text-sm text-blue-600 font-medium">Live Demo</div>
+                    </div>
+                </div>
+                
+                <!-- Embedded Dashboard Container -->
+                <div class="p-8">
+                    <div id="embedded-dashboard" class="dashboard-container">
+                        <div class="text-center">
+                            <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                                </svg>
+                            </div>
+                            <h4 class="text-lg font-semibold text-gray-900 mb-2">Dashboard Ready for Embedding</h4>
+                            <p class="text-gray-600 mb-4">This is where your embedded dashboard would appear</p>
+                            <button id="load-dashboard" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors">
+                                Load Embedded Dashboard
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Code Example -->
+        <div class="mt-12">
+            <h3 class="text-2xl font-bold text-gray-900 mb-6">Integration Code</h3>
+            <div class="bg-gray-900 rounded-lg p-6 overflow-x-auto">
+                <pre class="text-sm text-gray-300"><code id="code-example">// Embed this dashboard in your application
+import { createDashboard } from '@platform/embedding-sdk'
+
+const dashboard = createDashboard({
+  baseUrl: 'https://analytics.yourapp.com',
+  token: 'your-jwt-token',
+  dashboardId: 'ecommerce-demo',
+  container: '#dashboard-container',
+  theme: {
+    primaryColor: '#3b82f6',
+    backgroundColor: '#ffffff'
+  },
+  onLoad: () => console.log('Dashboard loaded!'),
+  onError: (error) => console.error('Error:', error)
+})
+
+// Control programmatically
+await dashboard.setFilters({ dateRange: 'last-30-days' })
+await dashboard.refresh()
+const pdfBlob = await dashboard.exportToPDF()</code></pre>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Sample data (in real implementation, this would come from the query engine)
+        const sampleData = {
+            metrics: {
+                totalRevenue: 156789.45,
+                totalOrders: 1010,
+                avgOrderValue: 155.34,
+                activeCustomers: 423
+            },
+            categories: [
+                { name: 'Electronics', revenue: 45234.56, orders: 145 },
+                { name: 'Clothing', revenue: 32156.78, orders: 234 },
+                { name: 'Books', revenue: 28945.32, orders: 189 },
+                { name: 'Home & Garden', revenue: 24567.89, orders: 167 },
+                { name: 'Sports', revenue: 18934.56, orders: 134 },
+                { name: 'Beauty', revenue: 6950.34, orders: 141 }
+            ],
+            monthlyTrends: [
+                { month: '2024-01', orders: 89, revenue: 12456.78 },
+                { month: '2024-02', orders: 123, revenue: 18934.56 },
+                { month: '2024-03', orders: 156, revenue: 24567.89 },
+                { month: '2024-04', orders: 134, revenue: 20123.45 },
+                { month: '2024-05', orders: 189, revenue: 28945.32 },
+                { month: '2024-06', orders: 167, revenue: 25678.90 },
+                { month: '2024-07', orders: 152, revenue: 22345.67 }
+            ]
+        }
+
+        // Update metrics
+        function updateMetrics() {
+            document.getElementById('total-revenue').textContent = 
+                '$' + sampleData.metrics.totalRevenue.toLocaleString()
+            document.getElementById('total-orders').textContent = 
+                sampleData.metrics.totalOrders.toLocaleString()
+            document.getElementById('avg-order-value').textContent = 
+                '$' + sampleData.metrics.avgOrderValue.toFixed(2)
+            document.getElementById('active-customers').textContent = 
+                sampleData.metrics.activeCustomers.toLocaleString()
+        }
+
+        // Create charts
+        function createCharts() {
+            // Sales by Category (Doughnut Chart)
+            const categoryCtx = document.getElementById('categoryChart').getContext('2d')
+            new Chart(categoryCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: sampleData.categories.map(c => c.name),
+                    datasets: [{
+                        data: sampleData.categories.map(c => c.revenue),
+                        backgroundColor: [
+                            '#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', 
+                            '#ef4444', '#ec4899'
+                        ],
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            })
+
+            // Monthly Trends (Line Chart)
+            const trendsCtx = document.getElementById('trendsChart').getContext('2d')
+            new Chart(trendsCtx, {
+                type: 'line',
+                data: {
+                    labels: sampleData.monthlyTrends.map(t => t.month),
+                    datasets: [{
+                        label: 'Revenue',
+                        data: sampleData.monthlyTrends.map(t => t.revenue),
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + value.toLocaleString()
+                                }
+                            }
+                        }
+                    }
+                }
+            })
+
+            // Top Products (Bar Chart)
+            const productsCtx = document.getElementById('productsChart').getContext('2d')
+            new Chart(productsCtx, {
+                type: 'bar',
+                data: {
+                    labels: sampleData.categories.slice(0, 5).map(c => c.name),
+                    datasets: [{
+                        label: 'Orders',
+                        data: sampleData.categories.slice(0, 5).map(c => c.orders),
+                        backgroundColor: '#10b981',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            })
+
+            // Geographic Distribution (Horizontal Bar)
+            const geoCtx = document.getElementById('geoChart').getContext('2d')
+            const stateData = ['CA', 'NY', 'TX', 'FL', 'WA', 'MA', 'CO']
+            const stateValues = [145, 123, 89, 67, 56, 45, 34]
+            
+            new Chart(geoCtx, {
+                type: 'bar',
+                data: {
+                    labels: stateData,
+                    datasets: [{
+                        label: 'Orders by State',
+                        data: stateValues,
+                        backgroundColor: '#8b5cf6',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            })
+        }
+
+        // Simulate loading embedded dashboard
+        function loadEmbeddedDashboard() {
+            const container = document.getElementById('embedded-dashboard')
+            container.innerHTML = `
+                <div class="w-full">
+                    <div class="mb-6 flex items-center justify-between">
+                        <h4 class="text-lg font-semibold text-gray-900">Embedded Analytics Dashboard</h4>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                            <span class="text-sm text-gray-600">Live Data</span>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-lg">
+                            <h5 class="text-sm font-medium text-blue-800 mb-2">Total Sales</h5>
+                            <p class="text-2xl font-bold text-blue-900">$156.8K</p>
+                            <p class="text-sm text-blue-600 mt-1">↗ +12.5%</p>
+                        </div>
+                        <div class="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-lg">
+                            <h5 class="text-sm font-medium text-green-800 mb-2">Orders</h5>
+                            <p class="text-2xl font-bold text-green-900">1,010</p>
+                            <p class="text-sm text-green-600 mt-1">↗ +8.2%</p>
+                        </div>
+                        <div class="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-lg">
+                            <h5 class="text-sm font-medium text-purple-800 mb-2">Customers</h5>
+                            <p class="text-2xl font-bold text-purple-900">423</p>
+                            <p class="text-sm text-purple-600 mt-1">↗ +15.3%</p>
+                        </div>
+                    </div>
+                    <div class="mt-6 p-4 bg-gray-50 rounded-lg text-center">
+                        <p class="text-sm text-gray-600">
+                            🎉 Dashboard successfully embedded using our Analytics Platform SDK!
+                        </p>
+                    </div>
+                </div>
+            `
+        }
+
+        // Event listeners
+        document.getElementById('refresh-btn').addEventListener('click', () => {
+            alert('Data refreshed! (In real implementation, this would trigger a fresh query)')
+        })
+
+        document.getElementById('export-btn').addEventListener('click', () => {
+            alert('PDF export initiated! (In real implementation, this would generate a PDF)')
+        })
+
+        document.getElementById('load-dashboard').addEventListener('click', loadEmbeddedDashboard)
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', () => {
+            updateMetrics()
+            createCharts()
+        })
+    </script>
+</body>
+</html> 

@@ -1,0 +1,180 @@
+version: '3.8'
+
+services:
+  # Databases
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: dashboard_platform
+      POSTGRES_USER: platform_user
+      POSTGRES_PASSWORD: platform_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U platform_user -d dashboard_platform"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Microservices
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - DATABASE_URL=postgresql://platform_user:platform_password@postgres:5432/dashboard_platform
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - JWT_REFRESH_SECRET=your-super-secret-refresh-key-change-in-production
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./services/auth-service:/app
+      - /app/node_modules
+    command: npm run dev
+
+  query-engine:
+    build:
+      context: ./services/query-engine
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=development
+      - PORT=3002
+      - REDIS_URL=redis://redis:6379
+      - AUTH_SERVICE_URL=http://auth-service:3001
+      - DATABRICKS_HOSTNAME=${DATABRICKS_HOSTNAME}
+      - DATABRICKS_HTTP_PATH=${DATABRICKS_HTTP_PATH}
+      - DATABRICKS_ACCESS_TOKEN=${DATABRICKS_ACCESS_TOKEN}
+    ports:
+      - "3002:3002"
+    depends_on:
+      - redis
+      - auth-service
+    volumes:
+      - ./services/query-engine:/app
+      - /app/node_modules
+    command: npm run dev
+
+  dashboard-service:
+    build:
+      context: ./services/dashboard-service
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=development
+      - PORT=3003
+      - DATABASE_URL=postgresql://platform_user:platform_password@postgres:5432/dashboard_platform
+      - REDIS_URL=redis://redis:6379
+      - AUTH_SERVICE_URL=http://auth-service:3001
+      - QUERY_ENGINE_URL=http://query-engine:3002
+    ports:
+      - "3003:3003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    volumes:
+      - ./services/dashboard-service:/app
+      - /app/node_modules
+    command: npm run dev
+
+  visualization-service:
+    build:
+      context: ./services/visualization-service
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=development
+      - PORT=3004
+      - REDIS_URL=redis://redis:6379
+      - AUTH_SERVICE_URL=http://auth-service:3001
+    ports:
+      - "3004:3004"
+    depends_on:
+      - redis
+      - auth-service
+    volumes:
+      - ./services/visualization-service:/app
+      - /app/node_modules
+    command: npm run dev
+
+  # Frontend Applications
+  dashboard-builder:
+    build:
+      context: ./apps/dashboard-builder
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=development
+      - VITE_API_BASE_URL=http://localhost:3001
+      - VITE_AUTH_SERVICE_URL=http://localhost:3001
+      - VITE_DASHBOARD_SERVICE_URL=http://localhost:3003
+      - VITE_QUERY_ENGINE_URL=http://localhost:3002
+      - VITE_VISUALIZATION_SERVICE_URL=http://localhost:3004
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./apps/dashboard-builder:/app
+      - /app/node_modules
+    command: npm run dev
+
+  hero-website:
+    build:
+      context: ./apps/hero-website
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=development
+      - VITE_API_BASE_URL=http://localhost:3001
+      - VITE_DEMO_DASHBOARD_URL=http://localhost:3000
+    ports:
+      - "3005:3005"
+    volumes:
+      - ./apps/hero-website:/app
+      - /app/node_modules
+    command: npm run dev
+
+  # API Gateway (Traefik)
+  traefik:
+    image: traefik:v3.0
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.api.address=:8080"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.localhost`)"
+      - "traefik.http.routers.traefik.service=api@internal"
+
+volumes:
+  postgres_data:
+  redis_data:

@@ -60,9 +60,24 @@ const Hero: React.FC = () => {
               Start Building Free
               <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </button>
-            <button className="border-2 border-gray-300 hover:border-gray-400 text-gray-700 px-8 py-4 rounded-lg font-semibold text-lg transition-all duration-200">
-              View Live Demo
-            </button>
+            <div className="flex gap-3">
+              <a 
+                href="http://localhost:8000/demo-mvp-test.html" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="border-2 border-blue-600 hover:bg-blue-600 text-blue-600 hover:text-white px-6 py-4 rounded-lg font-semibold text-base transition-all duration-200 inline-flex items-center shadow-lg hover:shadow-xl"
+              >
+                🎬 Live Demo
+              </a>
+              <a 
+                href="http://localhost:8000/demo-dashboard-builder.html" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-6 py-4 rounded-lg font-semibold text-base transition-all duration-200 inline-flex items-center shadow-lg hover:shadow-xl"
+              >
+                🎨 Dashboard Builder
+              </a>
+            </div>
           </motion.div>
 
           {/* Feature Pills */}

@@ -1,688 +1,358 @@
-import { db } from './database.service'
-import { logger } from '../utils/logger'
-import { config } from '../config'
-import { v4 as uuidv4 } from 'uuid'
-import type { 
-  Dashboard, 
-  Widget, 
-  CreateDashboardRequest,
-  UpdateDashboardRequest,
-  CreateWidgetRequest,
-  UpdateWidgetRequest,
-  DashboardWithWidgets 
-} from '@platform/shared-types'
+import { logger } from '../utils/logger';
+
+export interface Widget {
+  id: string;
+  type: 'chart' | 'metric' | 'table' | 'filter';
+  title: string;
+  position: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  config: {
+    chartType?: 'bar' | 'line' | 'pie' | 'doughnut';
+    query?: string;
+    dataSource?: string;
+    aggregation?: string;
+    xAxis?: string;
+    yAxis?: string;
+    styling?: Record<string, any>;
+  };
+}
+
+export interface Dashboard {
+  id: string;
+  title: string;
+  description?: string | undefined;
+  widgets: Widget[];
+  layout: {
+    grid: {
+      columns: number;
+      rows: number;
+    };
+  };
+  createdAt: Date;
+  updatedAt: Date;
+  tenantId: string;
+  isPublic: boolean;
+}
+
+// In-memory storage for MVP
+const dashboards = new Map<string, Dashboard>();
 
 export class DashboardService {
+  constructor() {
+    // Initialize with sample data
+    this.initializeSampleData();
+  }
 
   /**
    * Create a new dashboard
    */
-  async createDashboard(
-    request: CreateDashboardRequest,
-    context: { tenantId: string; userId: string }
-  ): Promise<Dashboard> {
+  async createDashboard(data: {
+    title: string;
+    description?: string;
+    tenantId: string;
+    widgets?: Widget[];
+    isPublic?: boolean;
+  }): Promise<Dashboard> {
     try {
-      // Check tenant dashboard limit
-      const dashboardCount = await db.client.dashboard.count({
-        where: { tenantId: context.tenantId }
-      })
-
-      if (dashboardCount >= config.maxDashboardsPerTenant) {
-        throw new Error(`Dashboard limit reached. Maximum ${config.maxDashboardsPerTenant} dashboards per tenant.`)
-      }
-
-      const dashboard = await db.client.dashboard.create({
-        data: {
-          name: request.name,
-          description: request.description,
-          tenantId: context.tenantId,
-          ownerId: context.userId,
-          layout: request.layout || {},
-          theme: request.theme || {},
-          filters: request.filters || [],
-          settings: request.settings || {},
-          status: 'DRAFT',
+      const dashboard: Dashboard = {
+        id: `dashboard_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        title: data.title,
+        description: data.description,
+        tenantId: data.tenantId,
+        widgets: data.widgets || [],
+        layout: {
+          grid: {
+            columns: 12,
+            rows: 10
+          }
         },
-      })
+        isPublic: data.isPublic || false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
 
-      logger.info({
-        dashboardId: dashboard.id,
-        tenantId: context.tenantId,
-        userId: context.userId,
-        name: request.name
-      }, 'Dashboard created')
-
-      return this.transformDashboard(dashboard)
+      dashboards.set(dashboard.id, dashboard);
+      logger.info(`Dashboard created: ${dashboard.id}`);
+      return dashboard;
     } catch (error) {
-      logger.error({
-        error: (error as Error).message,
-        tenantId: context.tenantId,
-        userId: context.userId,
-        request
-      }, 'Failed to create dashboard')
-      throw error
+      logger.error('Error creating dashboard:', error);
+      throw new Error('Failed to create dashboard');
     }
   }
 
   /**
    * Get dashboard by ID
    */
-  async getDashboard(
-    dashboardId: string,
-    context: { tenantId: string; userId: string }
-  ): Promise<DashboardWithWidgets> {
+  async getDashboard(id: string, tenantId?: string): Promise<Dashboard | null> {
     try {
-      const dashboard = await db.client.dashboard.findFirst({
-        where: {
-          id: dashboardId,
-          tenantId: context.tenantId,
-        },
-        include: {
-          widgets: {
-            orderBy: { order: 'asc' }
-          },
-          permissions: true,
-        },
-      })
-
+      const dashboard = dashboards.get(id);
+      
       if (!dashboard) {
-        throw new Error('Dashboard not found')
+        return null;
       }
 
-      // Check permissions
-      await this.checkDashboardAccess(dashboard, context.userId, 'read')
+      // Check access permissions
+      if (!dashboard.isPublic && dashboard.tenantId !== tenantId) {
+        return null;
+      }
 
-      return this.transformDashboardWithWidgets(dashboard)
+      return dashboard;
     } catch (error) {
-      logger.error({
-        error: (error as Error).message,
-        dashboardId,
-        tenantId: context.tenantId,
-        userId: context.userId
-      }, 'Failed to get dashboard')
-      throw error
+      logger.error('Error fetching dashboard:', error);
+      throw new Error('Failed to fetch dashboard');
     }
   }
 
   /**
-   * List dashboards for tenant
+   * Get all dashboards for a tenant
    */
-  async listDashboards(
-    context: { tenantId: string; userId: string },
-    options: {
-      page?: number
-      limit?: number
-      status?: string
-      search?: string
-    } = {}
-  ): Promise<{
-    dashboards: Dashboard[]
-    total: number
-    page: number
-    limit: number
-  }> {
+  async getDashboards(tenantId: string): Promise<Dashboard[]> {
     try {
-      const page = options.page || 1
-      const limit = Math.min(options.limit || 20, 100)
-      const offset = (page - 1) * limit
-
-      const where: any = {
-        tenantId: context.tenantId,
-        OR: [
-          { ownerId: context.userId },
-          {
-            permissions: {
-              some: {
-                userId: context.userId,
-              },
-            },
-          },
-          { isPublic: true },
-        ],
+      const result: Dashboard[] = [];
+      
+      for (const dashboard of dashboards.values()) {
+        if (dashboard.tenantId === tenantId || dashboard.isPublic) {
+          result.push(dashboard);
+        }
       }
 
-      if (options.status) {
-        where.status = options.status.toUpperCase()
-      }
-
-      if (options.search) {
-        where.OR = [
-          { name: { contains: options.search, mode: 'insensitive' } },
-          { description: { contains: options.search, mode: 'insensitive' } },
-        ]
-      }
-
-      const [dashboards, total] = await Promise.all([
-        db.client.dashboard.findMany({
-          where,
-          orderBy: { updatedAt: 'desc' },
-          skip: offset,
-          take: limit,
-        }),
-        db.client.dashboard.count({ where }),
-      ])
-
-      return {
-        dashboards: dashboards.map(d => this.transformDashboard(d)),
-        total,
-        page,
-        limit,
-      }
+      return result.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
     } catch (error) {
-      logger.error({
-        error: (error as Error).message,
-        tenantId: context.tenantId,
-        userId: context.userId,
-        options
-      }, 'Failed to list dashboards')
-      throw error
+      logger.error('Error fetching dashboards:', error);
+      throw new Error('Failed to fetch dashboards');
     }
   }
 
   /**
    * Update dashboard
    */
-  async updateDashboard(
-    dashboardId: string,
-    request: UpdateDashboardRequest,
-    context: { tenantId: string; userId: string }
-  ): Promise<Dashboard> {
+  async updateDashboard(id: string, data: Partial<Dashboard>, tenantId: string): Promise<Dashboard> {
     try {
-      const dashboard = await db.client.dashboard.findFirst({
-        where: {
-          id: dashboardId,
-          tenantId: context.tenantId,
-        },
-        include: { permissions: true },
-      })
-
-      if (!dashboard) {
-        throw new Error('Dashboard not found')
+      const existingDashboard = await this.getDashboard(id, tenantId);
+      if (!existingDashboard) {
+        throw new Error('Dashboard not found or access denied');
       }
 
-      // Check permissions
-      await this.checkDashboardAccess(dashboard, context.userId, 'write')
+      const updatedDashboard: Dashboard = {
+        ...existingDashboard,
+        ...data,
+        id: existingDashboard.id, // Ensure ID doesn't change
+        createdAt: existingDashboard.createdAt, // Preserve creation date
+        updatedAt: new Date(),
+      };
 
-      const updatedDashboard = await db.client.dashboard.update({
-        where: { id: dashboardId },
-        data: {
-          name: request.name,
-          description: request.description,
-          layout: request.layout,
-          theme: request.theme,
-          filters: request.filters,
-          settings: request.settings,
-          version: { increment: 1 },
-        },
-      })
-
-      logger.info({
-        dashboardId,
-        tenantId: context.tenantId,
-        userId: context.userId,
-        changes: Object.keys(request)
-      }, 'Dashboard updated')
-
-      return this.transformDashboard(updatedDashboard)
+      dashboards.set(id, updatedDashboard);
+      logger.info(`Dashboard updated: ${id}`);
+      return updatedDashboard;
     } catch (error) {
-      logger.error({
-        error: (error as Error).message,
-        dashboardId,
-        tenantId: context.tenantId,
-        userId: context.userId,
-        request
-      }, 'Failed to update dashboard')
-      throw error
+      logger.error('Error updating dashboard:', error);
+      throw new Error('Failed to update dashboard');
     }
   }
 
   /**
    * Delete dashboard
    */
-  async deleteDashboard(
-    dashboardId: string,
-    context: { tenantId: string; userId: string }
-  ): Promise<void> {
+  async deleteDashboard(id: string, tenantId: string): Promise<void> {
     try {
-      const dashboard = await db.client.dashboard.findFirst({
-        where: {
-          id: dashboardId,
-          tenantId: context.tenantId,
-        },
-        include: { permissions: true },
-      })
-
-      if (!dashboard) {
-        throw new Error('Dashboard not found')
+      const existingDashboard = await this.getDashboard(id, tenantId);
+      if (!existingDashboard) {
+        throw new Error('Dashboard not found or access denied');
       }
 
-      // Check permissions (owner or admin)
-      await this.checkDashboardAccess(dashboard, context.userId, 'admin')
-
-      await db.client.dashboard.delete({
-        where: { id: dashboardId },
-      })
-
-      logger.info({
-        dashboardId,
-        tenantId: context.tenantId,
-        userId: context.userId
-      }, 'Dashboard deleted')
+      dashboards.delete(id);
+      logger.info(`Dashboard deleted: ${id}`);
     } catch (error) {
-      logger.error({
-        error: (error as Error).message,
-        dashboardId,
-        tenantId: context.tenantId,
-        userId: context.userId
-      }, 'Failed to delete dashboard')
-      throw error
+      logger.error('Error deleting dashboard:', error);
+      throw new Error('Failed to delete dashboard');
     }
   }
 
   /**
-   * Publish dashboard
+   * Add widget to dashboard
    */
-  async publishDashboard(
-    dashboardId: string,
-    context: { tenantId: string; userId: string }
-  ): Promise<Dashboard> {
+  async addWidget(dashboardId: string, widget: Omit<Widget, 'id'>, tenantId: string): Promise<Dashboard> {
     try {
-      const dashboard = await db.client.dashboard.findFirst({
-        where: {
-          id: dashboardId,
-          tenantId: context.tenantId,
-        },
-        include: { 
-          permissions: true,
-          widgets: true,
-        },
-      })
-
+      const dashboard = await this.getDashboard(dashboardId, tenantId);
       if (!dashboard) {
-        throw new Error('Dashboard not found')
+        throw new Error('Dashboard not found or access denied');
       }
 
-      // Check permissions
-      await this.checkDashboardAccess(dashboard, context.userId, 'write')
+      const newWidget: Widget = {
+        ...widget,
+        id: `widget_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      };
 
-      // Create version snapshot before publishing
-      await this.createDashboardVersion(dashboard, context.userId)
+      const updatedWidgets = [...dashboard.widgets, newWidget];
 
-      const updatedDashboard = await db.client.dashboard.update({
-        where: { id: dashboardId },
-        data: {
-          status: 'PUBLISHED',
-          publishedAt: new Date(),
-          version: { increment: 1 },
-        },
-      })
-
-      logger.info({
-        dashboardId,
-        tenantId: context.tenantId,
-        userId: context.userId
-      }, 'Dashboard published')
-
-      return this.transformDashboard(updatedDashboard)
+      return await this.updateDashboard(dashboardId, { widgets: updatedWidgets }, tenantId);
     } catch (error) {
-      logger.error({
-        error: (error as Error).message,
-        dashboardId,
-        tenantId: context.tenantId,
-        userId: context.userId
-      }, 'Failed to publish dashboard')
-      throw error
+      logger.error('Error adding widget:', error);
+      throw new Error('Failed to add widget');
     }
   }
 
   /**
-   * Create widget
+   * Update widget in dashboard
    */
-  async createWidget(
-    dashboardId: string,
-    request: CreateWidgetRequest,
-    context: { tenantId: string; userId: string }
-  ): Promise<Widget> {
+  async updateWidget(dashboardId: string, widgetId: string, widgetData: Partial<Widget>, tenantId: string): Promise<Dashboard> {
     try {
-      const dashboard = await db.client.dashboard.findFirst({
-        where: {
-          id: dashboardId,
-          tenantId: context.tenantId,
-        },
-        include: { 
-          permissions: true,
-          widgets: true,
-        },
-      })
-
+      const dashboard = await this.getDashboard(dashboardId, tenantId);
       if (!dashboard) {
-        throw new Error('Dashboard not found')
+        throw new Error('Dashboard not found or access denied');
       }
 
-      // Check permissions
-      await this.checkDashboardAccess(dashboard, context.userId, 'write')
+      const updatedWidgets = dashboard.widgets.map(widget =>
+        widget.id === widgetId ? { ...widget, ...widgetData } : widget
+      );
 
-      // Check widget limit
-      if (dashboard.widgets.length >= config.maxWidgetsPerDashboard) {
-        throw new Error(`Widget limit reached. Maximum ${config.maxWidgetsPerDashboard} widgets per dashboard.`)
-      }
-
-      const widget = await db.client.widget.create({
-        data: {
-          dashboardId,
-          name: request.name,
-          description: request.description,
-          type: request.type,
-          config: request.config || {},
-          query: request.query || {},
-          position: request.position || {},
-          style: request.style || {},
-          dataSourceId: request.dataSourceId,
-          order: dashboard.widgets.length,
-        },
-      })
-
-      logger.info({
-        widgetId: widget.id,
-        dashboardId,
-        tenantId: context.tenantId,
-        userId: context.userId,
-        type: request.type
-      }, 'Widget created')
-
-      return this.transformWidget(widget)
+      return await this.updateDashboard(dashboardId, { widgets: updatedWidgets }, tenantId);
     } catch (error) {
-      logger.error({
-        error: (error as Error).message,
-        dashboardId,
-        tenantId: context.tenantId,
-        userId: context.userId,
-        request
-      }, 'Failed to create widget')
-      throw error
+      logger.error('Error updating widget:', error);
+      throw new Error('Failed to update widget');
     }
   }
 
   /**
-   * Update widget
+   * Remove widget from dashboard
    */
-  async updateWidget(
-    widgetId: string,
-    request: UpdateWidgetRequest,
-    context: { tenantId: string; userId: string }
-  ): Promise<Widget> {
+  async removeWidget(dashboardId: string, widgetId: string, tenantId: string): Promise<Dashboard> {
     try {
-      const widget = await db.client.widget.findFirst({
-        where: { id: widgetId },
-        include: {
-          dashboard: {
-            include: { permissions: true }
-          }
+      const dashboard = await this.getDashboard(dashboardId, tenantId);
+      if (!dashboard) {
+        throw new Error('Dashboard not found or access denied');
+      }
+
+      const updatedWidgets = dashboard.widgets.filter(widget => widget.id !== widgetId);
+
+      return await this.updateDashboard(dashboardId, { widgets: updatedWidgets }, tenantId);
+    } catch (error) {
+      logger.error('Error removing widget:', error);
+      throw new Error('Failed to remove widget');
+    }
+  }
+
+  /**
+   * Create sample Netflix dashboard
+   */
+  async createSampleNetflixDashboard(tenantId: string): Promise<Dashboard> {
+    const sampleWidgets: Widget[] = [
+      {
+        id: 'total-content-metric',
+        type: 'metric',
+        title: 'Total Content',
+        position: { x: 0, y: 0, width: 3, height: 2 },
+        config: {
+          query: 'SELECT COUNT(*) as count FROM netflix_imdb',
+          dataSource: 'netflix'
         }
-      })
-
-      if (!widget || widget.dashboard.tenantId !== context.tenantId) {
-        throw new Error('Widget not found')
-      }
-
-      // Check permissions
-      await this.checkDashboardAccess(widget.dashboard, context.userId, 'write')
-
-      const updatedWidget = await db.client.widget.update({
-        where: { id: widgetId },
-        data: {
-          name: request.name,
-          description: request.description,
-          config: request.config,
-          query: request.query,
-          position: request.position,
-          style: request.style,
-          dataSourceId: request.dataSourceId,
-          isVisible: request.isVisible,
-        },
-      })
-
-      logger.info({
-        widgetId,
-        dashboardId: widget.dashboardId,
-        tenantId: context.tenantId,
-        userId: context.userId
-      }, 'Widget updated')
-
-      return this.transformWidget(updatedWidget)
-    } catch (error) {
-      logger.error({
-        error: (error as Error).message,
-        widgetId,
-        tenantId: context.tenantId,
-        userId: context.userId,
-        request
-      }, 'Failed to update widget')
-      throw error
-    }
-  }
-
-  /**
-   * Delete widget
-   */
-  async deleteWidget(
-    widgetId: string,
-    context: { tenantId: string; userId: string }
-  ): Promise<void> {
-    try {
-      const widget = await db.client.widget.findFirst({
-        where: { id: widgetId },
-        include: {
-          dashboard: {
-            include: { permissions: true }
-          }
+      },
+      {
+        id: 'movies-metric',
+        type: 'metric',
+        title: 'Movies',
+        position: { x: 3, y: 0, width: 3, height: 2 },
+        config: {
+          query: "SELECT COUNT(*) as count FROM netflix_imdb WHERE type = 'Movie'",
+          dataSource: 'netflix'
         }
-      })
-
-      if (!widget || widget.dashboard.tenantId !== context.tenantId) {
-        throw new Error('Widget not found')
+      },
+      {
+        id: 'shows-metric',
+        type: 'metric',
+        title: 'TV Shows',
+        position: { x: 6, y: 0, width: 3, height: 2 },
+        config: {
+          query: "SELECT COUNT(*) as count FROM netflix_imdb WHERE type = 'TV Show'",
+          dataSource: 'netflix'
+        }
+      },
+      {
+        id: 'avg-rating-metric',
+        type: 'metric',
+        title: 'Avg IMDB Score',
+        position: { x: 9, y: 0, width: 3, height: 2 },
+        config: {
+          query: 'SELECT ROUND(AVG(imdb_score), 1) as avg_score FROM netflix_imdb WHERE imdb_score IS NOT NULL',
+          dataSource: 'netflix'
+        }
+      },
+      {
+        id: 'content-by-year-chart',
+        type: 'chart',
+        title: 'Content by Release Year',
+        position: { x: 0, y: 2, width: 6, height: 4 },
+        config: {
+          chartType: 'line',
+          query: 'SELECT release_year, COUNT(*) as count FROM netflix_imdb WHERE release_year IS NOT NULL GROUP BY release_year ORDER BY release_year',
+          dataSource: 'netflix',
+          xAxis: 'release_year',
+          yAxis: 'count'
+        }
+      },
+      {
+        id: 'content-by-type-chart',
+        type: 'chart',
+        title: 'Content Distribution',
+        position: { x: 6, y: 2, width: 6, height: 4 },
+        config: {
+          chartType: 'doughnut',
+          query: 'SELECT type, COUNT(*) as count FROM netflix_imdb GROUP BY type',
+          dataSource: 'netflix',
+          xAxis: 'type',
+          yAxis: 'count'
+        }
+      },
+      {
+        id: 'top-genres-chart',
+        type: 'chart',
+        title: 'Top Genres',
+        position: { x: 0, y: 6, width: 12, height: 4 },
+        config: {
+          chartType: 'bar',
+          query: `SELECT 
+                    TRIM(value) as genre, 
+                    COUNT(*) as count 
+                  FROM netflix_imdb, 
+                  json_each('[' || '"' || replace(replace(listed_in, ', ', '","'), ',', '","') || '"' || ']') 
+                  WHERE listed_in IS NOT NULL 
+                  GROUP BY TRIM(value) 
+                  ORDER BY count DESC 
+                  LIMIT 10`,
+          dataSource: 'netflix',
+          xAxis: 'genre',
+          yAxis: 'count'
+        }
       }
+    ];
 
-      // Check permissions
-      await this.checkDashboardAccess(widget.dashboard, context.userId, 'write')
-
-      await db.client.widget.delete({
-        where: { id: widgetId },
-      })
-
-      logger.info({
-        widgetId,
-        dashboardId: widget.dashboardId,
-        tenantId: context.tenantId,
-        userId: context.userId
-      }, 'Widget deleted')
-    } catch (error) {
-      logger.error({
-        error: (error as Error).message,
-        widgetId,
-        tenantId: context.tenantId,
-        userId: context.userId
-      }, 'Failed to delete widget')
-      throw error
-    }
+    return await this.createDashboard({
+      title: 'Netflix Content Analytics',
+      description: 'Comprehensive analytics dashboard for Netflix IMDB dataset',
+      tenantId,
+      widgets: sampleWidgets,
+      isPublic: true
+    });
   }
 
   /**
-   * Generate share token for dashboard
+   * Initialize sample data for demo
    */
-  async generateShareToken(
-    dashboardId: string,
-    context: { tenantId: string; userId: string }
-  ): Promise<string> {
+  private async initializeSampleData(): Promise<void> {
     try {
-      const dashboard = await db.client.dashboard.findFirst({
-        where: {
-          id: dashboardId,
-          tenantId: context.tenantId,
-        },
-        include: { permissions: true },
-      })
+      // Check if sample dashboard already exists
+      const existing = Array.from(dashboards.values()).find(d => d.title === 'Netflix Content Analytics');
+      if (existing) return;
 
-      if (!dashboard) {
-        throw new Error('Dashboard not found')
-      }
-
-      // Check permissions
-      await this.checkDashboardAccess(dashboard, context.userId, 'admin')
-
-      const shareToken = uuidv4()
-
-      await db.client.dashboard.update({
-        where: { id: dashboardId },
-        data: {
-          shareToken,
-          isPublic: true,
-        },
-      })
-
-      logger.info({
-        dashboardId,
-        tenantId: context.tenantId,
-        userId: context.userId
-      }, 'Share token generated')
-
-      return shareToken
+      // Create sample dashboard
+      await this.createSampleNetflixDashboard('demo-tenant');
+      logger.info('Sample Netflix dashboard initialized');
     } catch (error) {
-      logger.error({
-        error: (error as Error).message,
-        dashboardId,
-        tenantId: context.tenantId,
-        userId: context.userId
-      }, 'Failed to generate share token')
-      throw error
-    }
-  }
-
-  /**
-   * Check dashboard access permissions
-   */
-  private async checkDashboardAccess(
-    dashboard: any,
-    userId: string,
-    requiredPermission: 'read' | 'write' | 'admin'
-  ): Promise<void> {
-    // Owner has all permissions
-    if (dashboard.ownerId === userId) {
-      return
-    }
-
-    // Check public access for read
-    if (requiredPermission === 'read' && dashboard.isPublic) {
-      return
-    }
-
-    // Check explicit permissions
-    const permission = dashboard.permissions?.find((p: any) => p.userId === userId)
-    if (!permission) {
-      throw new Error('Access denied')
-    }
-
-    const permissionLevel = permission.role
-    const hasAccess = 
-      (requiredPermission === 'read' && ['VIEWER', 'EDITOR', 'ADMIN'].includes(permissionLevel)) ||
-      (requiredPermission === 'write' && ['EDITOR', 'ADMIN'].includes(permissionLevel)) ||
-      (requiredPermission === 'admin' && permissionLevel === 'ADMIN')
-
-    if (!hasAccess) {
-      throw new Error('Insufficient permissions')
-    }
-  }
-
-  /**
-   * Create dashboard version snapshot
-   */
-  private async createDashboardVersion(dashboard: any, userId: string): Promise<void> {
-    // Remove old versions if limit exceeded
-    const versionCount = await db.client.dashboardVersion.count({
-      where: { dashboardId: dashboard.id }
-    })
-
-    if (versionCount >= config.maxVersionsPerDashboard) {
-      const oldestVersion = await db.client.dashboardVersion.findFirst({
-        where: { dashboardId: dashboard.id },
-        orderBy: { version: 'asc' }
-      })
-
-      if (oldestVersion) {
-        await db.client.dashboardVersion.delete({
-          where: { id: oldestVersion.id }
-        })
-      }
-    }
-
-    await db.client.dashboardVersion.create({
-      data: {
-        dashboardId: dashboard.id,
-        version: dashboard.version,
-        name: `Version ${dashboard.version}`,
-        layout: dashboard.layout,
-        theme: dashboard.theme,
-        filters: dashboard.filters,
-        settings: dashboard.settings,
-        widgets: dashboard.widgets,
-        createdBy: userId,
-      }
-    })
-  }
-
-  /**
-   * Transform database dashboard to API format
-   */
-  private transformDashboard(dashboard: any): Dashboard {
-    return {
-      id: dashboard.id,
-      name: dashboard.name,
-      description: dashboard.description,
-      tenantId: dashboard.tenantId,
-      ownerId: dashboard.ownerId,
-      layout: dashboard.layout,
-      theme: dashboard.theme,
-      filters: dashboard.filters,
-      settings: dashboard.settings,
-      status: dashboard.status.toLowerCase(),
-      version: dashboard.version,
-      isPublic: dashboard.isPublic,
-      shareToken: dashboard.shareToken,
-      createdAt: dashboard.createdAt,
-      updatedAt: dashboard.updatedAt,
-      publishedAt: dashboard.publishedAt,
-    }
-  }
-
-  /**
-   * Transform dashboard with widgets to API format
-   */
-  private transformDashboardWithWidgets(dashboard: any): DashboardWithWidgets {
-    return {
-      ...this.transformDashboard(dashboard),
-      widgets: dashboard.widgets.map((w: any) => this.transformWidget(w)),
-    }
-  }
-
-  /**
-   * Transform database widget to API format
-   */
-  private transformWidget(widget: any): Widget {
-    return {
-      id: widget.id,
-      dashboardId: widget.dashboardId,
-      name: widget.name,
-      description: widget.description,
-      type: widget.type.toLowerCase(),
-      config: widget.config,
-      query: widget.query,
-      position: widget.position,
-      style: widget.style,
-      dataSourceId: widget.dataSourceId,
-      isVisible: widget.isVisible,
-      order: widget.order,
-      createdAt: widget.createdAt,
-      updatedAt: widget.updatedAt,
+      logger.error('Error initializing sample data:', error);
     }
   }
 } 

@@ -20,8 +20,11 @@ const Navbar: React.FC = () => {
               <a href="#features" className="text-gray-500 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
                 Features
               </a>
-              <a href="#demo" className="text-gray-500 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-                Demo
+              <a href="http://localhost:8000/demo-mvp-test.html" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-900 px-3 py-2 rounded-md text-sm font-medium font-semibold">
+                🎬 Demo
+              </a>
+              <a href="http://localhost:8000/demo-dashboard-builder.html" target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:text-purple-900 px-3 py-2 rounded-md text-sm font-medium font-semibold">
+                🎨 Builder
               </a>
               <a href="#pricing" className="text-gray-500 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
                 Pricing
@@ -63,8 +66,8 @@ const Navbar: React.FC = () => {
             <a href="#features" className="text-gray-500 hover:text-gray-900 block px-3 py-2 rounded-md text-base font-medium">
               Features
             </a>
-            <a href="#demo" className="text-gray-500 hover:text-gray-900 block px-3 py-2 rounded-md text-base font-medium">
-              Demo
+            <a href="http://localhost:8000/demo-mvp-test.html" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-900 block px-3 py-2 rounded-md text-base font-medium font-semibold">
+              🎬 Live Demo
             </a>
             <a href="#pricing" className="text-gray-500 hover:text-gray-900 block px-3 py-2 rounded-md text-base font-medium">
               Pricing

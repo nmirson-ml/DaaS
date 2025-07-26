@@ -3,185 +3,46 @@
 
 generator client {
   provider = "prisma-client-js"
-  output   = "../src/generated/prisma"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 model Dashboard {
   id          String   @id @default(cuid())
-  name        String   @db.VarChar(255)
-  description String?  @db.Text
-  tenantId    String   @map("tenant_id") @db.VarChar(50)
-  ownerId     String   @map("owner_id") @db.VarChar(50)
-  
-  // Dashboard configuration
-  layout      Json     @default("{}") @db.JsonB // Grid layout configuration
-  theme       Json     @default("{}") @db.JsonB // Theme and styling
-  filters     Json     @default("[]") @db.JsonB // Global dashboard filters
-  settings    Json     @default("{}") @db.JsonB // Dashboard settings
-  
-  // Access control
-  isPublic    Boolean  @default(false) @map("is_public")
-  shareToken  String?  @unique @map("share_token") @db.VarChar(100)
-  
-  // Status
-  status      DashboardStatus @default(DRAFT)
-  version     Int      @default(1)
-  
-  // Timestamps
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
-  publishedAt DateTime? @map("published_at") @db.Timestamptz
-
-  // Relationships
-  widgets     Widget[]
-  permissions DashboardPermission[]
-  versions    DashboardVersion[]
+  title       String
+  description String?
+  tenantId    String
+  widgets     String   @default("[]")
+  layout      String   @default("{}")
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@map("dashboards")
-  @@index([tenantId])
-  @@index([ownerId])
-  @@index([status])
-  @@index([shareToken])
 }
 
-model Widget {
-  id           String   @id @default(cuid())
-  dashboardId  String   @map("dashboard_id") @db.VarChar(50)
-  name         String   @db.VarChar(255)
-  description  String?  @db.Text
-  
-  // Widget type and configuration
-  type         WidgetType
-  config       Json     @default("{}") @db.JsonB // Widget-specific configuration
-  query        Json     @default("{}") @db.JsonB // Query configuration
-  
-  // Layout and positioning
-  position     Json     @default("{}") @db.JsonB // {x, y, width, height}
-  style        Json     @default("{}") @db.JsonB // Custom styling
-  
-  // Data source
-  dataSourceId String?  @map("data_source_id") @db.VarChar(50)
-  
-  // Status
-  isVisible    Boolean  @default(true) @map("is_visible")
-  order        Int      @default(0)
-  
-  // Timestamps
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  tenantId  String
+  role      String   @default("user")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  // Relationships
-  dashboard    Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
-
-  @@map("widgets")
-  @@index([dashboardId])
-  @@index([type])
-  @@index([dataSourceId])
+  @@map("users")
 }
 
-model DashboardPermission {
-  id          String   @id @default(cuid())
-  dashboardId String   @map("dashboard_id") @db.VarChar(50)
-  userId      String   @map("user_id") @db.VarChar(50)
-  role        DashboardRole
-  
-  // Timestamps
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+model ApiKey {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  tenantId  String
+  name      String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  // Relationships
-  dashboard   Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
-
-  @@unique([dashboardId, userId])
-  @@map("dashboard_permissions")
-  @@index([userId])
-}
-
-model DashboardVersion {
-  id          String   @id @default(cuid())
-  dashboardId String   @map("dashboard_id") @db.VarChar(50)
-  version     Int
-  name        String?  @db.VarChar(255)
-  description String?  @db.Text
-  
-  // Snapshot data
-  layout      Json     @db.JsonB
-  theme       Json     @db.JsonB
-  filters     Json     @db.JsonB
-  settings    Json     @db.JsonB
-  widgets     Json     @db.JsonB // Snapshot of widgets
-  
-  // Metadata
-  createdBy   String   @map("created_by") @db.VarChar(50)
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
-
-  // Relationships
-  dashboard   Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
-
-  @@unique([dashboardId, version])
-  @@map("dashboard_versions")
-  @@index([dashboardId])
-}
-
-model DataSource {
-  id           String   @id @default(cuid())
-  tenantId     String   @map("tenant_id") @db.VarChar(50)
-  name         String   @db.VarChar(255)
-  description  String?  @db.Text
-  type         DataSourceType
-  
-  // Connection configuration (encrypted)
-  config       Json     @db.JsonB
-  
-  // Status
-  isActive     Boolean  @default(true) @map("is_active")
-  lastTested   DateTime? @map("last_tested") @db.Timestamptz
-  
-  // Timestamps
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
-
-  @@map("data_sources")
-  @@index([tenantId])
-  @@index([type])
-}
-
-enum DashboardStatus {
-  DRAFT
-  PUBLISHED
-  ARCHIVED
-}
-
-enum WidgetType {
-  BAR_CHART
-  LINE_CHART
-  PIE_CHART
-  SCATTER_PLOT
-  TABLE
-  METRIC
-  MAP
-  HEATMAP
-  TEXT
-  IMAGE
-  IFRAME
-}
-
-enum DashboardRole {
-  VIEWER
-  EDITOR
-  ADMIN
-}
-
-enum DataSourceType {
-  DATABRICKS
-  BIGQUERY
-  SNOWFLAKE
-  POSTGRESQL
-  MYSQL
-  REST_API
+  @@map("api_keys")
 } 

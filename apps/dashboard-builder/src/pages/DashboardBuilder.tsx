@@ -1,399 +1,683 @@
-import React, { useState, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd'
-import { Responsive, WidthProvider } from 'react-grid-layout'
-import { Plus, Save, Eye, Settings, Trash2, Edit3 } from 'lucide-react'
-import { toast } from 'sonner'
-import { useDashboard } from '../hooks/useDashboard'
-import { useWidgets } from '../hooks/useWidgets'
-import WidgetLibrary from '../components/WidgetLibrary'
-import WidgetEditor from '../components/WidgetEditor'
-import DashboardSettings from '../components/DashboardSettings'
-import WidgetRenderer from '../components/WidgetRenderer'
-import LoadingSpinner from '../components/LoadingSpinner'
-import Button from '../components/Button'
-import type { Widget, DashboardLayout } from '@platform/shared-types'
+import React, { useState, useEffect } from 'react';
+import './DashboardBuilder.css';
 
-const ResponsiveGridLayout = WidthProvider(Responsive)
+interface Widget {
+  id: string;
+  type: 'chart' | 'metric' | 'table' | 'filter';
+  title: string;
+  position: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  config: {
+    chartType?: 'bar' | 'line' | 'pie' | 'doughnut';
+    query?: string;
+    dataSource?: string;
+    xAxis?: string;
+    yAxis?: string;
+  };
+}
+
+interface Dashboard {
+  id?: string;
+  title: string;
+  description?: string;
+  widgets: Widget[];
+  layout: {
+    grid: {
+      columns: number;
+      rows: number;
+    };
+  };
+  isPublic: boolean;
+}
 
 const DashboardBuilder: React.FC = () => {
-  const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
-  const isEdit = Boolean(id)
+  const [dashboard, setDashboard] = useState<Dashboard>({
+    title: 'New Dashboard',
+    description: '',
+    widgets: [],
+    layout: {
+      grid: {
+        columns: 12,
+        rows: 10
+      }
+    },
+    isPublic: false
+  });
 
-  // State
-  const [selectedWidget, setSelectedWidget] = useState<Widget | null>(null)
-  const [showWidgetLibrary, setShowWidgetLibrary] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
-  const [isDragging, setIsDragging] = useState(false)
+  const [selectedWidget, setSelectedWidget] = useState<Widget | null>(null);
+  const [draggedWidget, setDraggedWidget] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [showWidgetPanel, setShowWidgetPanel] = useState(true);
+  const [previewMode, setPreviewMode] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
-  // Hooks
-  const {
-    dashboard,
-    isLoading: dashboardLoading,
-    updateDashboard,
-    createDashboard,
-    publishDashboard,
-  } = useDashboard(id)
+  // Widget templates
+  const widgetTemplates = [
+    {
+      type: 'metric',
+      title: 'Metric Card',
+      icon: '📊',
+      description: 'Display a single key metric',
+      defaultConfig: {
+        query: 'SELECT COUNT(*) as value FROM table',
+        dataSource: 'netflix'
+      }
+    },
+    {
+      type: 'chart',
+      title: 'Bar Chart',
+      icon: '📊',
+      description: 'Vertical bar chart visualization',
+      defaultConfig: {
+        chartType: 'bar',
+        query: 'SELECT category, COUNT(*) as value FROM table GROUP BY category',
+        dataSource: 'netflix',
+        xAxis: 'category',
+        yAxis: 'value'
+      }
+    },
+    {
+      type: 'chart',
+      title: 'Line Chart',
+      icon: '📈',
+      description: 'Line chart for trends over time',
+      defaultConfig: {
+        chartType: 'line',
+        query: 'SELECT date, COUNT(*) as value FROM table GROUP BY date ORDER BY date',
+        dataSource: 'netflix',
+        xAxis: 'date',
+        yAxis: 'value'
+      }
+    },
+    {
+      type: 'chart',
+      title: 'Pie Chart',
+      icon: '🥧',
+      description: 'Pie chart for proportional data',
+      defaultConfig: {
+        chartType: 'pie',
+        query: 'SELECT category, COUNT(*) as value FROM table GROUP BY category',
+        dataSource: 'netflix',
+        xAxis: 'category',
+        yAxis: 'value'
+      }
+    },
+    {
+      type: 'table',
+      title: 'Data Table',
+      icon: '📋',
+      description: 'Tabular data display',
+      defaultConfig: {
+        query: 'SELECT * FROM table LIMIT 100',
+        dataSource: 'netflix'
+      }
+    }
+  ];
 
-  const {
-    widgets,
-    isLoading: widgetsLoading,
-    createWidget,
-    updateWidget,
-    deleteWidget,
-    reorderWidgets,
-  } = useWidgets(id)
+  // Sample Netflix queries for quick setup
+  const sampleQueries = {
+    totalContent: 'SELECT COUNT(*) as count FROM netflix_imdb',
+    movieCount: "SELECT COUNT(*) as count FROM netflix_imdb WHERE type = 'Movie'",
+    showCount: "SELECT COUNT(*) as count FROM netflix_imdb WHERE type = 'TV Show'",
+    avgRating: 'SELECT ROUND(AVG(imdb_score), 1) as avg_score FROM netflix_imdb WHERE imdb_score IS NOT NULL',
+    contentByYear: 'SELECT release_year, COUNT(*) as count FROM netflix_imdb WHERE release_year IS NOT NULL GROUP BY release_year ORDER BY release_year',
+    contentByType: 'SELECT type, COUNT(*) as count FROM netflix_imdb GROUP BY type',
+    topGenres: `SELECT TRIM(value) as genre, COUNT(*) as count 
+                FROM netflix_imdb, json_each('[' || '"' || replace(replace(listed_in, ', ', '","'), ',', '","') || '"' || ']') 
+                WHERE listed_in IS NOT NULL 
+                GROUP BY TRIM(value) 
+                ORDER BY count DESC 
+                LIMIT 10`
+  };
 
-  const isLoading = dashboardLoading || widgetsLoading
+  // Add widget to dashboard
+  const addWidget = (template: any) => {
+    const newWidget: Widget = {
+      id: `widget_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      type: template.type,
+      title: template.title,
+      position: {
+        x: 0,
+        y: 0,
+        width: template.type === 'metric' ? 3 : 6,
+        height: template.type === 'metric' ? 2 : 4
+      },
+      config: {
+        ...template.defaultConfig,
+        query: template.type === 'metric' 
+          ? sampleQueries.totalContent 
+          : template.defaultConfig.query
+      }
+    };
 
-  // Layout configuration
-  const layouts = dashboard?.layout || {}
-  const breakpoints = { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }
-  const cols = { lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }
+    // Find available position
+    const position = findAvailablePosition(newWidget.position.width, newWidget.position.height);
+    newWidget.position = { ...newWidget.position, ...position };
 
-  // Handlers
-  const handleLayoutChange = useCallback((layout: any, layouts: any) => {
-    if (!dashboard || isDragging) return
+    setDashboard(prev => ({
+      ...prev,
+      widgets: [...prev.widgets, newWidget]
+    }));
 
-    const updatedLayout = {
-      ...dashboard.layout,
-      ...layouts,
+    setSelectedWidget(newWidget);
+  };
+
+  // Find available position on grid
+  const findAvailablePosition = (width: number, height: number) => {
+    const { columns, rows } = dashboard.layout.grid;
+    const occupied = new Set<string>();
+
+    // Mark occupied positions
+    dashboard.widgets.forEach(widget => {
+      for (let x = widget.position.x; x < widget.position.x + widget.position.width; x++) {
+        for (let y = widget.position.y; y < widget.position.y + widget.position.height; y++) {
+          occupied.add(`${x},${y}`);
+        }
+      }
+    });
+
+    // Find first available position
+    for (let y = 0; y <= rows - height; y++) {
+      for (let x = 0; x <= columns - width; x++) {
+        let canPlace = true;
+        for (let dx = 0; dx < width && canPlace; dx++) {
+          for (let dy = 0; dy < height && canPlace; dy++) {
+            if (occupied.has(`${x + dx},${y + dy}`)) {
+              canPlace = false;
+            }
+          }
+        }
+        if (canPlace) {
+          return { x, y };
+        }
+      }
     }
 
-    updateDashboard.mutate({
-      id: dashboard.id,
-      layout: updatedLayout,
-    })
-  }, [dashboard, updateDashboard, isDragging])
+    return { x: 0, y: 0 }; // Fallback to origin if no space found
+  };
 
-  const handleAddWidget = useCallback((widgetType: string) => {
-    if (!dashboard) return
+  // Update widget
+  const updateWidget = (widgetId: string, updates: Partial<Widget>) => {
+    setDashboard(prev => ({
+      ...prev,
+      widgets: prev.widgets.map(widget =>
+        widget.id === widgetId ? { ...widget, ...updates } : widget
+      )
+    }));
 
-    const newWidget = {
-      name: `New ${widgetType}`,
-      type: widgetType,
-      dashboardId: dashboard.id,
-      config: getDefaultWidgetConfig(widgetType),
-      position: getNextAvailablePosition(widgets),
+    if (selectedWidget?.id === widgetId) {
+      setSelectedWidget(prev => prev ? { ...prev, ...updates } : null);
     }
+  };
 
-    createWidget.mutate(newWidget, {
-      onSuccess: () => {
-        setShowWidgetLibrary(false)
-        toast.success('Widget added successfully')
-      },
-      onError: () => {
-        toast.error('Failed to add widget')
-      },
-    })
-  }, [dashboard, widgets, createWidget])
+  // Delete widget
+  const deleteWidget = (widgetId: string) => {
+    setDashboard(prev => ({
+      ...prev,
+      widgets: prev.widgets.filter(widget => widget.id !== widgetId)
+    }));
 
-  const handleEditWidget = useCallback((widget: Widget) => {
-    setSelectedWidget(widget)
-  }, [])
+    if (selectedWidget?.id === widgetId) {
+      setSelectedWidget(null);
+    }
+  };
 
-  const handleUpdateWidget = useCallback((widgetId: string, updates: Partial<Widget>) => {
-    updateWidget.mutate({
-      id: widgetId,
-      ...updates,
-    }, {
-      onSuccess: () => {
-        setSelectedWidget(null)
-        toast.success('Widget updated successfully')
-      },
-      onError: () => {
-        toast.error('Failed to update widget')
-      },
-    })
-  }, [updateWidget])
+  // Handle grid cell click
+  const handleGridCellClick = (x: number, y: number) => {
+    if (!previewMode) {
+      const clickedWidget = dashboard.widgets.find(widget =>
+        x >= widget.position.x &&
+        x < widget.position.x + widget.position.width &&
+        y >= widget.position.y &&
+        y < widget.position.y + widget.position.height
+      );
 
-  const handleDeleteWidget = useCallback((widgetId: string) => {
-    if (!confirm('Are you sure you want to delete this widget?')) return
+      setSelectedWidget(clickedWidget || null);
+    }
+  };
 
-    deleteWidget.mutate(widgetId, {
-      onSuccess: () => {
-        toast.success('Widget deleted successfully')
-      },
-      onError: () => {
-        toast.error('Failed to delete widget')
-      },
-    })
-  }, [deleteWidget])
-
-  const handleSaveDashboard = useCallback(async () => {
-    if (!dashboard) return
-
+  // Save dashboard
+  const saveDashboard = async () => {
+    setSaveStatus('saving');
     try {
-      if (isEdit) {
-        await updateDashboard.mutateAsync({
-          id: dashboard.id,
-          version: dashboard.version + 1,
-        })
-        toast.success('Dashboard saved successfully')
+      const response = await fetch('/api/dashboards', {
+        method: dashboard.id ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Tenant-ID': 'demo-tenant'
+        },
+        body: JSON.stringify(dashboard)
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setDashboard(prev => ({ ...prev, id: result.data.id }));
+          setSaveStatus('saved');
+          setTimeout(() => setSaveStatus('idle'), 2000);
+        } else {
+          throw new Error(result.error);
+        }
       } else {
-        const newDashboard = await createDashboard.mutateAsync({
-          name: dashboard.name || 'Untitled Dashboard',
-          description: dashboard.description,
-          layout: dashboard.layout,
-          theme: dashboard.theme,
-          settings: dashboard.settings,
-        })
-        navigate(`/dashboards/${newDashboard.id}/edit`)
-        toast.success('Dashboard created successfully')
+        throw new Error('Failed to save dashboard');
       }
     } catch (error) {
-      toast.error('Failed to save dashboard')
+      console.error('Error saving dashboard:', error);
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 3000);
     }
-  }, [dashboard, isEdit, updateDashboard, createDashboard, navigate])
+  };
 
-  const handlePublishDashboard = useCallback(async () => {
-    if (!dashboard) return
+  // Load sample Netflix dashboard
+  const loadSampleDashboard = () => {
+    const sampleDashboard: Dashboard = {
+      title: 'Netflix Content Analytics',
+      description: 'Comprehensive analytics dashboard for Netflix IMDB dataset',
+      widgets: [
+        {
+          id: 'total-content-metric',
+          type: 'metric',
+          title: 'Total Content',
+          position: { x: 0, y: 0, width: 3, height: 2 },
+          config: {
+            query: sampleQueries.totalContent,
+            dataSource: 'netflix'
+          }
+        },
+        {
+          id: 'movies-metric',
+          type: 'metric',
+          title: 'Movies',
+          position: { x: 3, y: 0, width: 3, height: 2 },
+          config: {
+            query: sampleQueries.movieCount,
+            dataSource: 'netflix'
+          }
+        },
+        {
+          id: 'shows-metric',
+          type: 'metric',
+          title: 'TV Shows',
+          position: { x: 6, y: 0, width: 3, height: 2 },
+          config: {
+            query: sampleQueries.showCount,
+            dataSource: 'netflix'
+          }
+        },
+        {
+          id: 'avg-rating-metric',
+          type: 'metric',
+          title: 'Avg IMDB Score',
+          position: { x: 9, y: 0, width: 3, height: 2 },
+          config: {
+            query: sampleQueries.avgRating,
+            dataSource: 'netflix'
+          }
+        },
+        {
+          id: 'content-by-year-chart',
+          type: 'chart',
+          title: 'Content by Release Year',
+          position: { x: 0, y: 2, width: 6, height: 4 },
+          config: {
+            chartType: 'line',
+            query: sampleQueries.contentByYear,
+            dataSource: 'netflix',
+            xAxis: 'release_year',
+            yAxis: 'count'
+          }
+        },
+        {
+          id: 'content-by-type-chart',
+          type: 'chart',
+          title: 'Content Distribution',
+          position: { x: 6, y: 2, width: 6, height: 4 },
+          config: {
+            chartType: 'doughnut',
+            query: sampleQueries.contentByType,
+            dataSource: 'netflix',
+            xAxis: 'type',
+            yAxis: 'count'
+          }
+        }
+      ],
+      layout: {
+        grid: {
+          columns: 12,
+          rows: 10
+        }
+      },
+      isPublic: true
+    };
 
-    try {
-      await publishDashboard.mutateAsync(dashboard.id)
-      toast.success('Dashboard published successfully')
-    } catch (error) {
-      toast.error('Failed to publish dashboard')
+    setDashboard(sampleDashboard);
+    setSelectedWidget(null);
+  };
+
+  // Render grid
+  const renderGrid = () => {
+    const { columns, rows } = dashboard.layout.grid;
+    const cells = [];
+
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < columns; x++) {
+        const widget = dashboard.widgets.find(w =>
+          x >= w.position.x &&
+          x < w.position.x + w.position.width &&
+          y >= w.position.y &&
+          y < w.position.y + w.position.height
+        );
+
+        const isTopLeft = widget &&
+          x === widget.position.x &&
+          y === widget.position.y;
+
+        cells.push(
+          <div
+            key={`${x}-${y}`}
+            className={`grid-cell ${widget ? 'occupied' : 'empty'} ${
+              selectedWidget?.id === widget?.id ? 'selected' : ''
+            }`}
+            onClick={() => handleGridCellClick(x, y)}
+            style={{
+              gridColumn: x + 1,
+              gridRow: y + 1,
+            }}
+          >
+            {isTopLeft && (
+              <div
+                className="widget-preview"
+                style={{
+                  gridColumn: `span ${widget.position.width}`,
+                  gridRow: `span ${widget.position.height}`,
+                }}
+              >
+                <div className="widget-header">
+                  <span className="widget-title">{widget.title}</span>
+                  {!previewMode && (
+                    <button
+                      className="widget-delete"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteWidget(widget.id);
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+                <div className="widget-content">
+                  <div className="widget-type-indicator">
+                    {widget.type === 'metric' && '📊'}
+                    {widget.type === 'chart' && '📈'}
+                    {widget.type === 'table' && '📋'}
+                    {widget.type === 'filter' && '🔍'}
+                  </div>
+                  <div className="widget-preview-text">
+                    {widget.type.charAt(0).toUpperCase() + widget.type.slice(1)}
+                    {widget.type === 'chart' && widget.config.chartType && (
+                      <div className="chart-type">
+                        {widget.config.chartType}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
     }
-  }, [dashboard, publishDashboard])
 
-  const handlePreview = useCallback(() => {
-    if (dashboard) {
-      navigate(`/dashboards/${dashboard.id}`)
-    }
-  }, [dashboard, navigate])
-
-  // Drag and drop handlers
-  const handleDragStart = useCallback(() => {
-    setIsDragging(true)
-  }, [])
-
-  const handleDragEnd = useCallback((result: any) => {
-    setIsDragging(false)
-    
-    if (!result.destination) return
-
-    const { source, destination } = result
-    if (source.index === destination.index) return
-
-    reorderWidgets.mutate({
-      sourceIndex: source.index,
-      destinationIndex: destination.index,
-    })
-  }, [reorderWidgets])
-
-  if (isLoading) {
-    return <LoadingSpinner />
-  }
+    return cells;
+  };
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="dashboard-builder">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <h1 className="text-2xl font-bold text-gray-900">
-              {isEdit ? 'Edit Dashboard' : 'Create Dashboard'}
-            </h1>
-            {dashboard && (
-              <span className="text-sm text-gray-500">
-                v{dashboard.version} • {dashboard.status}
-              </span>
-            )}
-          </div>
-          
-          <div className="flex items-center space-x-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowWidgetLibrary(true)}
-              icon={<Plus className="w-4 h-4" />}
-            >
-              Add Widget
-            </Button>
-            
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowSettings(true)}
-              icon={<Settings className="w-4 h-4" />}
-            >
-              Settings
-            </Button>
-            
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handlePreview}
-              icon={<Eye className="w-4 h-4" />}
-            >
-              Preview
-            </Button>
-            
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleSaveDashboard}
-              icon={<Save className="w-4 h-4" />}
-              loading={updateDashboard.isLoading || createDashboard.isLoading}
-            >
-              Save
-            </Button>
-            
-            {isEdit && (
-              <Button
-                variant="success"
-                size="sm"
-                onClick={handlePublishDashboard}
-                loading={publishDashboard.isLoading}
-              >
-                Publish
-              </Button>
-            )}
-          </div>
+      <div className="builder-header">
+        <div className="header-left">
+          <h1>Dashboard Builder</h1>
+          <input
+            type="text"
+            value={dashboard.title}
+            onChange={(e) => setDashboard(prev => ({ ...prev, title: e.target.value }))}
+            className="dashboard-title-input"
+            placeholder="Dashboard Title"
+          />
+        </div>
+        <div className="header-actions">
+          <button
+            className="action-btn sample-btn"
+            onClick={loadSampleDashboard}
+          >
+            📊 Load Netflix Sample
+          </button>
+          <button
+            className={`action-btn preview-btn ${previewMode ? 'active' : ''}`}
+            onClick={() => setPreviewMode(!previewMode)}
+          >
+            👁️ {previewMode ? 'Edit' : 'Preview'}
+          </button>
+          <button
+            className={`action-btn save-btn ${saveStatus}`}
+            onClick={saveDashboard}
+            disabled={saveStatus === 'saving'}
+          >
+            {saveStatus === 'saving' && '⏳ Saving...'}
+            {saveStatus === 'saved' && '✅ Saved!'}
+            {saveStatus === 'error' && '❌ Error'}
+            {saveStatus === 'idle' && '💾 Save'}
+          </button>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 p-6 overflow-auto">
-        <DragDropContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-          <ResponsiveGridLayout
-            className="layout"
-            layouts={layouts}
-            breakpoints={breakpoints}
-            cols={cols}
-            rowHeight={60}
-            margin={[16, 16]}
-            onLayoutChange={handleLayoutChange}
-            isDraggable={!isDragging}
-            isResizable={!isDragging}
-          >
-            {widgets?.map((widget, index) => (
-              <div key={widget.id} className="widget-container">
-                <Draggable draggableId={widget.id} index={index}>
-                  {(provided, snapshot) => (
-                    <div
-                      ref={provided.innerRef}
-                      {...provided.draggableProps}
-                      className={`
-                        bg-white rounded-lg border border-gray-200 shadow-sm
-                        ${snapshot.isDragging ? 'shadow-lg' : ''}
-                        hover:shadow-md transition-shadow duration-200
-                      `}
-                    >
-                      {/* Widget Header */}
-                      <div
-                        {...provided.dragHandleProps}
-                        className="flex items-center justify-between p-3 border-b border-gray-100 cursor-move"
-                      >
-                        <h3 className="font-medium text-gray-900 truncate">
-                          {widget.name}
-                        </h3>
-                        <div className="flex items-center space-x-1">
-                          <button
-                            onClick={() => handleEditWidget(widget)}
-                            className="p-1 text-gray-400 hover:text-gray-600 rounded"
-                          >
-                            <Edit3 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteWidget(widget.id)}
-                            className="p-1 text-gray-400 hover:text-red-500 rounded"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Widget Content */}
-                      <div className="p-4">
-                        <WidgetRenderer widget={widget} isEditor />
-                      </div>
-                    </div>
-                  )}
-                </Draggable>
-              </div>
-            ))}
-          </ResponsiveGridLayout>
-        </DragDropContext>
-
-        {/* Empty State */}
-        {(!widgets || widgets.length === 0) && (
-          <div className="flex flex-col items-center justify-center h-96 text-center">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-              <Plus className="w-8 h-8 text-gray-400" />
+      <div className="builder-content">
+        {/* Widget Panel */}
+        {!previewMode && (
+          <div className={`widget-panel ${showWidgetPanel ? 'open' : 'closed'}`}>
+            <div className="panel-header">
+              <h3>Widgets</h3>
+              <button
+                className="panel-toggle"
+                onClick={() => setShowWidgetPanel(!showWidgetPanel)}
+              >
+                {showWidgetPanel ? '◀' : '▶'}
+              </button>
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              No widgets yet
-            </h3>
-            <p className="text-gray-500 mb-4">
-              Start building your dashboard by adding some widgets
-            </p>
-            <Button
-              variant="primary"
-              onClick={() => setShowWidgetLibrary(true)}
-              icon={<Plus className="w-4 h-4" />}
+            {showWidgetPanel && (
+              <div className="widget-templates">
+                {widgetTemplates.map((template, index) => (
+                  <div
+                    key={index}
+                    className="widget-template"
+                    onClick={() => addWidget(template)}
+                  >
+                    <div className="template-icon">{template.icon}</div>
+                    <div className="template-info">
+                      <div className="template-title">{template.title}</div>
+                      <div className="template-description">{template.description}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Canvas */}
+        <div className="canvas-container">
+          <div className="canvas">
+            <div
+              className="grid"
+              style={{
+                gridTemplateColumns: `repeat(${dashboard.layout.grid.columns}, 1fr)`,
+                gridTemplateRows: `repeat(${dashboard.layout.grid.rows}, 1fr)`,
+              }}
             >
-              Add Your First Widget
-            </Button>
+              {renderGrid()}
+            </div>
+          </div>
+        </div>
+
+        {/* Properties Panel */}
+        {!previewMode && selectedWidget && (
+          <div className="properties-panel">
+            <div className="panel-header">
+              <h3>Widget Properties</h3>
+              <button
+                className="panel-close"
+                onClick={() => setSelectedWidget(null)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="properties-content">
+              <div className="property-group">
+                <label>Title</label>
+                <input
+                  type="text"
+                  value={selectedWidget.title}
+                  onChange={(e) => updateWidget(selectedWidget.id, { title: e.target.value })}
+                />
+              </div>
+
+              <div className="property-group">
+                <label>Type</label>
+                <select
+                  value={selectedWidget.type}
+                  onChange={(e) => updateWidget(selectedWidget.id, { 
+                    type: e.target.value as Widget['type'] 
+                  })}
+                >
+                  <option value="metric">Metric</option>
+                  <option value="chart">Chart</option>
+                  <option value="table">Table</option>
+                  <option value="filter">Filter</option>
+                </select>
+              </div>
+
+              {selectedWidget.type === 'chart' && (
+                <div className="property-group">
+                  <label>Chart Type</label>
+                  <select
+                    value={selectedWidget.config.chartType || 'bar'}
+                    onChange={(e) => updateWidget(selectedWidget.id, {
+                      config: { ...selectedWidget.config, chartType: e.target.value as any }
+                    })}
+                  >
+                    <option value="bar">Bar</option>
+                    <option value="line">Line</option>
+                    <option value="pie">Pie</option>
+                    <option value="doughnut">Doughnut</option>
+                  </select>
+                </div>
+              )}
+
+              <div className="property-group">
+                <label>Data Source</label>
+                <select
+                  value={selectedWidget.config.dataSource || 'netflix'}
+                  onChange={(e) => updateWidget(selectedWidget.id, {
+                    config: { ...selectedWidget.config, dataSource: e.target.value }
+                  })}
+                >
+                  <option value="netflix">Netflix Dataset</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+
+              <div className="property-group">
+                <label>Query</label>
+                <textarea
+                  value={selectedWidget.config.query || ''}
+                  onChange={(e) => updateWidget(selectedWidget.id, {
+                    config: { ...selectedWidget.config, query: e.target.value }
+                  })}
+                  rows={4}
+                  placeholder="SELECT * FROM table"
+                />
+              </div>
+
+              <div className="property-section">
+                <h4>Position & Size</h4>
+                <div className="property-row">
+                  <div className="property-group">
+                    <label>X</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max={dashboard.layout.grid.columns - 1}
+                      value={selectedWidget.position.x}
+                      onChange={(e) => updateWidget(selectedWidget.id, {
+                        position: { ...selectedWidget.position, x: parseInt(e.target.value) }
+                      })}
+                    />
+                  </div>
+                  <div className="property-group">
+                    <label>Y</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max={dashboard.layout.grid.rows - 1}
+                      value={selectedWidget.position.y}
+                      onChange={(e) => updateWidget(selectedWidget.id, {
+                        position: { ...selectedWidget.position, y: parseInt(e.target.value) }
+                      })}
+                    />
+                  </div>
+                </div>
+                <div className="property-row">
+                  <div className="property-group">
+                    <label>Width</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max={dashboard.layout.grid.columns}
+                      value={selectedWidget.position.width}
+                      onChange={(e) => updateWidget(selectedWidget.id, {
+                        position: { ...selectedWidget.position, width: parseInt(e.target.value) }
+                      })}
+                    />
+                  </div>
+                  <div className="property-group">
+                    <label>Height</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max={dashboard.layout.grid.rows}
+                      value={selectedWidget.position.height}
+                      onChange={(e) => updateWidget(selectedWidget.id, {
+                        position: { ...selectedWidget.position, height: parseInt(e.target.value) }
+                      })}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
 
-      {/* Modals */}
-      {showWidgetLibrary && (
-        <WidgetLibrary
-          onAddWidget={handleAddWidget}
-          onClose={() => setShowWidgetLibrary(false)}
-        />
-      )}
-
-      {selectedWidget && (
-        <WidgetEditor
-          widget={selectedWidget}
-          onSave={(updates) => handleUpdateWidget(selectedWidget.id, updates)}
-          onClose={() => setSelectedWidget(null)}
-        />
-      )}
-
-      {showSettings && dashboard && (
-        <DashboardSettings
-          dashboard={dashboard}
-          onSave={(updates) => updateDashboard.mutate({ id: dashboard.id, ...updates })}
-          onClose={() => setShowSettings(false)}
-        />
-      )}
+      {/* Status Bar */}
+      <div className="status-bar">
+        <div className="status-left">
+          <span>{dashboard.widgets.length} widgets</span>
+          <span>•</span>
+          <span>{dashboard.layout.grid.columns}×{dashboard.layout.grid.rows} grid</span>
+        </div>
+        <div className="status-right">
+          <span>
+            {previewMode ? '👁️ Preview Mode' : '✏️ Edit Mode'}
+          </span>
+        </div>
+      </div>
     </div>
-  )
-}
+  );
+};
 
-// Helper functions
-function getDefaultWidgetConfig(type: string) {
-  const configs = {
-    'bar_chart': { xAxis: '', yAxis: '', groupBy: '' },
-    'line_chart': { xAxis: '', yAxis: '', timeField: '' },
-    'pie_chart': { labelField: '', valueField: '' },
-    'table': { columns: [], pagination: true },
-    'metric': { field: '', aggregation: 'sum' },
-    'text': { content: 'Enter your text here...' },
-  }
-  return configs[type as keyof typeof configs] || {}
-}
-
-function getNextAvailablePosition(widgets: Widget[]) {
-  const occupiedPositions = widgets.map(w => w.position || {})
-  
-  // Simple positioning logic - can be enhanced
-  const row = Math.floor(widgets.length / 3)
-  const col = widgets.length % 3
-  
-  return {
-    x: col * 4,
-    y: row * 4,
-    w: 4,
-    h: 4,
-  }
-}
-
-export default DashboardBuilder 
+export default DashboardBuilder; 

@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DaaS Platform - Full Embedded Dashboard Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .canvas-state {
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            border: 3px dashed #cbd5e1;
+            border-radius: 12px;
+            min-height: 80vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.5s ease;
+        }
+        
+        .dashboard-grid {
+            display: none;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 24px;
+            padding: 24px;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.8s ease;
+        }
+        
+        .dashboard-grid.active {
+            display: grid;
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        .chart-container {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e2e8f0;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            animation: slideInUp 0.6s ease forwards;
+            opacity: 0;
+        }
+        
+        .chart-container:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+        }
+        
+        @keyframes slideInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .chart-container:nth-child(1) { animation-delay: 0.1s; }
+        .chart-container:nth-child(2) { animation-delay: 0.2s; }
+        .chart-container:nth-child(3) { animation-delay: 0.3s; }
+        .chart-container:nth-child(4) { animation-delay: 0.4s; }
+        .chart-container:nth-child(5) { animation-delay: 0.5s; }
+        .chart-container:nth-child(6) { animation-delay: 0.6s; }
+        
+        .metric-badge {
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            color: white;
+            padding: 6px 16px;
+            border-radius: 24px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #e2e8f0;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .pulse-dot {
+            width: 12px;
+            height: 12px;
+            background: #10b981;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <svg class="w-8 h-8 text-blue-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                    <h1 class="text-xl font-bold text-gray-900">DaaS Platform - Full Embedded Demo</h1>
+                    <div class="metric-badge ml-4">DuckDB Powered</div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-2">
+                        <div class="pulse-dot"></div>
+                        <span class="text-sm text-gray-600">Live Data</span>
+                    </div>
+                    <button id="load-dashboard-btn" class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-6 py-2 rounded-lg text-sm font-medium transition-all duration-300 transform hover:scale-105">
+                        🚀 Load Full Dashboard
+                    </button>
+                    <button id="export-btn" class="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                        📊 Export Data
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Canvas State -->
+        <div id="canvas-container" class="canvas-state">
+            <div class="text-center">
+                <div class="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <svg class="w-12 h-12 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                </div>
+                <h2 class="text-3xl font-bold text-gray-900 mb-4">Embedded Dashboard Canvas</h2>
+                <p class="text-lg text-gray-600 mb-6">Click "Load Full Dashboard" to populate with DuckDB-powered analytics</p>
+                <div class="bg-white rounded-lg p-6 max-w-md mx-auto shadow-sm border border-gray-200">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-3">Ready to Load:</h3>
+                    <ul class="text-sm text-gray-600 space-y-2 text-left">
+                        <li>✅ DuckDB Connection Ready</li>
+                        <li>✅ 1,000+ E-commerce Records</li>
+                        <li>✅ Real-time Chart Rendering</li>
+                        <li>✅ Interactive Visualizations</li>
+                        <li>✅ SDK Integration Demo</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loading-container" class="canvas-state hidden">
+            <div class="text-center">
+                <div class="loading-spinner mx-auto mb-4"></div>
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">Loading Dashboard...</h2>
+                <p class="text-gray-600 mb-4">Connecting to DuckDB and rendering charts</p>
+                <div class="bg-white rounded-lg p-4 max-w-sm mx-auto shadow-sm">
+                    <div class="text-sm text-gray-600">
+                        <div id="loading-step">Initializing DuckDB connection...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dashboard Grid -->
+        <div id="dashboard-grid" class="dashboard-grid">
+            <!-- Sales Overview Chart -->
+            <div class="chart-container">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">Sales by Category</h3>
+                    <span class="text-sm text-blue-600 bg-blue-50 px-3 py-1 rounded-full">DuckDB Query</span>
+                </div>
+                <div style="height: 300px;">
+                    <canvas id="salesChart"></canvas>
+                </div>
+                <div class="mt-4 text-sm text-gray-600">
+                    <div class="flex justify-between">
+                        <span>Total Categories: <strong>8</strong></span>
+                        <span>Query Time: <strong id="sales-query-time">0ms</strong></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Revenue Trends Chart -->
+            <div class="chart-container">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">Monthly Revenue Trends</h3>
+                    <span class="text-sm text-green-600 bg-green-50 px-3 py-1 rounded-full">Time Series</span>
+                </div>
+                <div style="height: 300px;">
+                    <canvas id="revenueChart"></canvas>
+                </div>
+                <div class="mt-4 text-sm text-gray-600">
+                    <div class="flex justify-between">
+                        <span>Data Points: <strong>12 months</strong></span>
+                        <span>Growth Rate: <strong id="growth-rate">+12.5%</strong></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Customer Demographics -->
+            <div class="chart-container">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">Customer Age Distribution</h3>
+                    <span class="text-sm text-purple-600 bg-purple-50 px-3 py-1 rounded-full">Demographics</span>
+                </div>
+                <div style="height: 300px;">
+                    <canvas id="demographicsChart"></canvas>
+                </div>
+                <div class="mt-4 text-sm text-gray-600">
+                    <div class="flex justify-between">
+                        <span>Age Groups: <strong>5</strong></span>
+                        <span>Total Customers: <strong id="total-customers">0</strong></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Geographic Distribution -->
+            <div class="chart-container">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">Sales by State</h3>
+                    <span class="text-sm text-orange-600 bg-orange-50 px-3 py-1 rounded-full">Geographic</span>
+                </div>
+                <div style="height: 300px;">
+                    <canvas id="geoChart"></canvas>
+                </div>
+                <div class="mt-4 text-sm text-gray-600">
+                    <div class="flex justify-between">
+                        <span>States: <strong>10</strong></span>
+                        <span>Top State: <strong id="top-state">California</strong></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Product Performance -->
+            <div class="chart-container">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">Top Products Performance</h3>
+                    <span class="text-sm text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">Product Analytics</span>
+                </div>
+                <div style="height: 300px;">
+                    <canvas id="productsChart"></canvas>
+                </div>
+                <div class="mt-4 text-sm text-gray-600">
+                    <div class="flex justify-between">
+                        <span>Products Tracked: <strong>25+</strong></span>
+                        <span>Revenue Impact: <strong>$450K+</strong></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Order Trends -->
+            <div class="chart-container">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">Daily Order Patterns</h3>
+                    <span class="text-sm text-teal-600 bg-teal-50 px-3 py-1 rounded-full">Behavioral</span>
+                </div>
+                <div style="height: 300px;">
+                    <canvas id="ordersChart"></canvas>
+                </div>
+                <div class="mt-4 text-sm text-gray-600">
+                    <div class="flex justify-between">
+                        <span>Peak Hour: <strong>2:00 PM</strong></span>
+                        <span>Avg Daily Orders: <strong>47</strong></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dashboard Stats -->
+        <div id="dashboard-stats" class="hidden mt-8 bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Dashboard Performance</h3>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-blue-600" id="total-queries">6</div>
+                    <div class="text-sm text-gray-600">DuckDB Queries Executed</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-green-600" id="total-records">1,010</div>
+                    <div class="text-sm text-gray-600">Records Processed</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-purple-600" id="render-time">2.3s</div>
+                    <div class="text-sm text-gray-600">Total Render Time</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-orange-600" id="data-size">42KB</div>
+                    <div class="text-sm text-gray-600">Data Transferred</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Simulated DuckDB data - in real implementation this would come from the query engine
+        const duckDBData = {
+            // Sales by Category (from DuckDB query: SELECT product_category, SUM(total_amount) FROM ecommerce_sales GROUP BY product_category)
+            categories: [
+                { category: 'Electronics', revenue: 185420.50, orders: 247, percentage: 26.1 },
+                { category: 'Clothing', revenue: 142380.25, orders: 312, percentage: 20.0 },
+                { category: 'Books', revenue: 89650.75, orders: 189, percentage: 12.6 },
+                { category: 'Home & Garden', revenue: 156780.40, orders: 205, percentage: 22.1 },
+                { category: 'Sports', revenue: 78420.30, orders: 167, percentage: 11.0 },
+                { category: 'Beauty', revenue: 45230.20, orders: 134, percentage: 6.4 },
+                { category: 'Automotive', revenue: 23450.15, orders: 89, percentage: 3.3 },
+                { category: 'Toys', revenue: 18960.45, orders: 95, percentage: 2.7 }
+            ],
+            
+            // Monthly Revenue (from DuckDB query: SELECT strftime(order_date, '%Y-%m') as month, SUM(total_amount) FROM ecommerce_sales GROUP BY month)
+            monthlyRevenue: [
+                { month: 'Jan', revenue: 45230, orders: 156 },
+                { month: 'Feb', revenue: 52180, orders: 189 },
+                { month: 'Mar', revenue: 48790, orders: 167 },
+                { month: 'Apr', revenue: 56420, orders: 203 },
+                { month: 'May', revenue: 62350, orders: 234 },
+                { month: 'Jun', revenue: 58940, orders: 218 },
+                { month: 'Jul', revenue: 67230, orders: 245 },
+                { month: 'Aug', revenue: 71850, orders: 267 },
+                { month: 'Sep', revenue: 65420, orders: 241 },
+                { month: 'Oct', revenue: 73560, orders: 278 },
+                { month: 'Nov', revenue: 79340, orders: 289 },
+                { month: 'Dec', revenue: 85670, orders: 312 }
+            ],
+            
+            // Customer Age Distribution (from DuckDB query: SELECT CASE WHEN customer_age < 25 THEN '18-24' ... GROUP BY age_group)
+            demographics: [
+                { ageGroup: '18-24', count: 234, percentage: 23.2 },
+                { ageGroup: '25-34', count: 312, percentage: 30.9 },
+                { ageGroup: '35-44', count: 287, percentage: 28.4 },
+                { ageGroup: '45-54', count: 134, percentage: 13.3 },
+                { ageGroup: '55+', count: 43, percentage: 4.3 }
+            ],
+            
+            // Geographic Distribution (from DuckDB query: SELECT customer_state, SUM(total_amount) FROM ecommerce_sales GROUP BY customer_state)
+            states: [
+                { state: 'CA', revenue: 125420, orders: 287 },
+                { state: 'NY', revenue: 98340, orders: 234 },
+                { state: 'TX', revenue: 87650, orders: 201 },
+                { state: 'FL', revenue: 76520, orders: 189 },
+                { state: 'WA', revenue: 65430, orders: 156 },
+                { state: 'MA', revenue: 54320, orders: 134 },
+                { state: 'CO', revenue: 45230, orders: 112 },
+                { state: 'IL', revenue: 43210, orders: 98 },
+                { state: 'AZ', revenue: 38940, orders: 87 },
+                { state: 'OR', revenue: 34560, orders: 76 }
+            ],
+            
+            // Top Products (from DuckDB query: SELECT product_name, SUM(total_amount) FROM ecommerce_sales GROUP BY product_name ORDER BY revenue DESC LIMIT 10)
+            products: [
+                { name: 'Laptop', revenue: 78940, units: 89 },
+                { name: 'Smartphone', revenue: 65420, units: 134 },
+                { name: 'Tablet', revenue: 45230, units: 98 },
+                { name: 'Headphones', revenue: 34560, units: 156 },
+                { name: 'Smart Watch', revenue: 28940, units: 87 },
+                { name: 'Coffee Maker', revenue: 23450, units: 234 },
+                { name: 'Running Shoes', revenue: 19870, units: 145 },
+                { name: 'Jeans', revenue: 18650, units: 189 },
+                { name: 'Cookbook', revenue: 15420, units: 267 },
+                { name: 'Yoga Mat', revenue: 12340, units: 178 }
+            ],
+            
+            // Hourly Order Patterns (simulated from DuckDB timestamp analysis)
+            hourlyOrders: [
+                { hour: '6 AM', orders: 12 }, { hour: '7 AM', orders: 18 }, { hour: '8 AM', orders: 25 },
+                { hour: '9 AM', orders: 34 }, { hour: '10 AM', orders: 42 }, { hour: '11 AM', orders: 38 },
+                { hour: '12 PM', orders: 45 }, { hour: '1 PM', orders: 52 }, { hour: '2 PM', orders: 58 },
+                { hour: '3 PM', orders: 49 }, { hour: '4 PM', orders: 44 }, { hour: '5 PM', orders: 47 },
+                { hour: '6 PM', orders: 55 }, { hour: '7 PM', orders: 48 }, { hour: '8 PM', orders: 41 },
+                { hour: '9 PM', orders: 35 }, { hour: '10 PM', orders: 28 }, { hour: '11 PM', orders: 19 }
+            ]
+        };
+
+        let charts = {};
+        let loadingSteps = [
+            'Initializing DuckDB connection...',
+            'Executing category sales query...',
+            'Processing revenue trends data...',
+            'Analyzing customer demographics...',
+            'Calculating geographic distribution...',
+            'Rendering interactive charts...'
+        ];
+
+        function simulateLoading() {
+            const canvasContainer = document.getElementById('canvas-container');
+            const loadingContainer = document.getElementById('loading-container');
+            const loadingStep = document.getElementById('loading-step');
+            
+            canvasContainer.style.display = 'none';
+            loadingContainer.style.display = 'flex';
+            
+            let stepIndex = 0;
+            const stepInterval = setInterval(() => {
+                if (stepIndex < loadingSteps.length) {
+                    loadingStep.textContent = loadingSteps[stepIndex];
+                    stepIndex++;
+                } else {
+                    clearInterval(stepInterval);
+                    showDashboard();
+                }
+            }, 800);
+        }
+
+        function showDashboard() {
+            const loadingContainer = document.getElementById('loading-container');
+            const dashboardGrid = document.getElementById('dashboard-grid');
+            const dashboardStats = document.getElementById('dashboard-stats');
+            
+            loadingContainer.style.display = 'none';
+            dashboardGrid.classList.add('active');
+            dashboardStats.classList.remove('hidden');
+            
+            // Create charts with staggered animation
+            setTimeout(() => createSalesChart(), 100);
+            setTimeout(() => createRevenueChart(), 200);
+            setTimeout(() => createDemographicsChart(), 300);
+            setTimeout(() => createGeoChart(), 400);
+            setTimeout(() => createProductsChart(), 500);
+            setTimeout(() => createOrdersChart(), 600);
+            
+            // Update stats
+            updateDashboardStats();
+        }
+
+        function createSalesChart() {
+            const ctx = document.getElementById('salesChart').getContext('2d');
+            charts.sales = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: duckDBData.categories.map(c => c.category),
+                    datasets: [{
+                        data: duckDBData.categories.map(c => c.revenue),
+                        backgroundColor: [
+                            '#3b82f6', '#8b5cf6', '#10b981', '#f59e0b',
+                            '#ef4444', '#ec4899', '#14b8a6', '#f97316'
+                        ],
+                        borderWidth: 0,
+                        hoverBorderWidth: 3,
+                        hoverBorderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 20,
+                                usePointStyle: true
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const category = duckDBData.categories[context.dataIndex];
+                                    return `${category.category}: $${category.revenue.toLocaleString()} (${category.percentage}%)`;
+                                }
+                            }
+                        }
+                    },
+                    animation: {
+                        animateRotate: true,
+                        duration: 1500
+                    }
+                }
+            });
+            
+            document.getElementById('sales-query-time').textContent = '47ms';
+        }
+
+        function createRevenueChart() {
+            const ctx = document.getElementById('revenueChart').getContext('2d');
+            charts.revenue = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: duckDBData.monthlyRevenue.map(m => m.month),
+                    datasets: [{
+                        label: 'Monthly Revenue',
+                        data: duckDBData.monthlyRevenue.map(m => m.revenue),
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointBackgroundColor: '#3b82f6',
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 2,
+                        pointRadius: 6,
+                        pointHoverRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const data = duckDBData.monthlyRevenue[context.dataIndex];
+                                    return `Revenue: $${data.revenue.toLocaleString()} | Orders: ${data.orders}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + (value / 1000) + 'K';
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    },
+                    animation: {
+                        duration: 2000,
+                        easing: 'easeInOutQuart'
+                    }
+                }
+            });
+        }
+
+        function createDemographicsChart() {
+            const ctx = document.getElementById('demographicsChart').getContext('2d');
+            charts.demographics = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: duckDBData.demographics.map(d => d.ageGroup),
+                    datasets: [{
+                        label: 'Customers',
+                        data: duckDBData.demographics.map(d => d.count),
+                        backgroundColor: '#8b5cf6',
+                        borderRadius: 8,
+                        borderSkipped: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const demo = duckDBData.demographics[context.dataIndex];
+                                    return `${demo.count} customers (${demo.percentage}%)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    },
+                    animation: {
+                        duration: 1500,
+                        delay: (context) => context.dataIndex * 100
+                    }
+                }
+            });
+            
+            const totalCustomers = duckDBData.demographics.reduce((sum, d) => sum + d.count, 0);
+            document.getElementById('total-customers').textContent = totalCustomers.toLocaleString();
+        }
+
+        function createGeoChart() {
+            const ctx = document.getElementById('geoChart').getContext('2d');
+            charts.geo = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: duckDBData.states.map(s => s.state),
+                    datasets: [{
+                        label: 'Revenue by State',
+                        data: duckDBData.states.map(s => s.revenue),
+                        backgroundColor: '#f59e0b',
+                        borderRadius: 6,
+                        borderSkipped: false
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const state = duckDBData.states[context.dataIndex];
+                                    return `${state.state}: $${state.revenue.toLocaleString()} | ${state.orders} orders`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + (value / 1000) + 'K';
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        },
+                        y: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    },
+                    animation: {
+                        duration: 1800,
+                        delay: (context) => context.dataIndex * 80
+                    }
+                }
+            });
+            
+            document.getElementById('top-state').textContent = duckDBData.states[0].state;
+        }
+
+        function createProductsChart() {
+            const ctx = document.getElementById('productsChart').getContext('2d');
+            const topProducts = duckDBData.products.slice(0, 6);
+            
+            charts.products = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: topProducts.map(p => p.name),
+                    datasets: [{
+                        label: 'Revenue',
+                        data: topProducts.map(p => p.revenue),
+                        backgroundColor: '#6366f1',
+                        borderRadius: 8,
+                        borderSkipped: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const product = topProducts[context.dataIndex];
+                                    return `${product.name}: $${product.revenue.toLocaleString()} | ${product.units} units`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + (value / 1000) + 'K';
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    },
+                    animation: {
+                        duration: 1600,
+                        delay: (context) => context.dataIndex * 120
+                    }
+                }
+            });
+        }
+
+        function createOrdersChart() {
+            const ctx = document.getElementById('ordersChart').getContext('2d');
+            const hourlyData = duckDBData.hourlyOrders.filter((_, i) => i % 2 === 0); // Show every other hour
+            
+            charts.orders = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: hourlyData.map(h => h.hour),
+                    datasets: [{
+                        label: 'Orders per Hour',
+                        data: hourlyData.map(h => h.orders),
+                        borderColor: '#14b8a6',
+                        backgroundColor: 'rgba(20, 184, 166, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointBackgroundColor: '#14b8a6',
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 2,
+                        pointRadius: 5,
+                        pointHoverRadius: 7
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    },
+                    animation: {
+                        duration: 2200,
+                        easing: 'easeInOutCubic'
+                    }
+                }
+            });
+        }
+
+        function updateDashboardStats() {
+            document.getElementById('total-queries').textContent = '6';
+            document.getElementById('total-records').textContent = '1,010';
+            document.getElementById('render-time').textContent = '2.3s';
+            document.getElementById('data-size').textContent = '42KB';
+        }
+
+        // Event Listeners
+        document.getElementById('load-dashboard-btn').addEventListener('click', () => {
+            simulateLoading();
+            // Change button state
+            const btn = document.getElementById('load-dashboard-btn');
+            btn.innerHTML = '🔄 Loading...';
+            btn.disabled = true;
+            
+            setTimeout(() => {
+                btn.innerHTML = '✅ Dashboard Loaded';
+                btn.disabled = false;
+                btn.classList.remove('from-blue-600', 'to-purple-600', 'hover:from-blue-700', 'hover:to-purple-700');
+                btn.classList.add('from-green-600', 'to-green-700', 'hover:from-green-700', 'hover:to-green-800');
+            }, 5000);
+        });
+
+        document.getElementById('export-btn').addEventListener('click', () => {
+            alert('📊 Export functionality would generate CSV/PDF with current DuckDB query results');
+        });
+    </script>
+</body>
+</html>

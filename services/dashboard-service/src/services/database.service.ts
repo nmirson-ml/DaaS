@@ -1,4 +1,4 @@
-import { PrismaClient } from './generated/prisma'
+import { PrismaClient } from '@prisma/client'
 import { logger } from '../utils/logger'
 
 class DatabaseService {
@@ -7,28 +7,7 @@ class DatabaseService {
 
   constructor() {
     this.client = new PrismaClient({
-      log: [
-        { emit: 'event', level: 'query' },
-        { emit: 'event', level: 'error' },
-        { emit: 'event', level: 'info' },
-        { emit: 'event', level: 'warn' },
-      ],
-    })
-
-    // Log Prisma events
-    this.client.$on('query', (e) => {
-      logger.debug({
-        query: e.query,
-        params: e.params,
-        duration: e.duration,
-      }, 'Database query executed')
-    })
-
-    this.client.$on('error', (e) => {
-      logger.error({
-        error: e.message,
-        target: e.target,
-      }, 'Database error')
+      log: ['query', 'error', 'info', 'warn'],
     })
   }
 
@@ -69,7 +48,7 @@ class DatabaseService {
     }
   }
 
-  async transaction<T>(fn: (prisma: PrismaClient) => Promise<T>): Promise<T> {
+  async transaction(fn: any): Promise<any> {
     return this.client.$transaction(fn)
   }
 

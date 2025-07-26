@@ -25,7 +25,8 @@
   "author": "Platform Team",
   "license": "MIT",
   "dependencies": {
-    "@platform/shared-types": "workspace:*"
+    "@platform/shared-types": "workspace:*",
+    "chart.js": "^4.4.0"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^25.0.7",

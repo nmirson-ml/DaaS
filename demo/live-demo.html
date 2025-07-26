@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Analytics Platform Demo - Real DuckDB Data</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error-state {
+            background: #fee2e2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+            padding: 12px;
+            border-radius: 8px;
+        }
+        
+        .success-state {
+            background: #dcfce7;
+            border: 1px solid #bbf7d0;
+            color: #16a34a;
+            padding: 12px;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <svg class="w-8 h-8 text-blue-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                    <h1 class="text-xl font-bold text-gray-900">Live Analytics Platform Demo</h1>
+                    <span class="ml-3 px-3 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded-full">LIVE DATA</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div id="connection-status" class="flex items-center text-sm">
+                        <div class="loading mr-2"></div>
+                        <span>Connecting to services...</span>
+                    </div>
+                    <button id="refresh-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50" disabled>
+                        Refresh Data
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Service Status -->
+        <div class="mb-8">
+            <h2 class="text-3xl font-bold text-gray-900 mb-4">Netflix Analytics Dashboard</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div id="query-service-status" class="p-4 bg-white rounded-lg border border-gray-200">
+                    <div class="flex items-center">
+                        <div class="loading mr-3"></div>
+                        <div>
+                            <h3 class="font-semibold text-gray-900">Query Engine</h3>
+                            <p class="text-sm text-gray-600">Connecting...</p>
+                        </div>
+                    </div>
+                </div>
+                <div id="duckdb-status" class="p-4 bg-white rounded-lg border border-gray-200">
+                    <div class="flex items-center">
+                        <div class="loading mr-3"></div>
+                        <div>
+                            <h3 class="font-semibold text-gray-900">DuckDB</h3>
+                            <p class="text-sm text-gray-600">Connecting...</p>
+                        </div>
+                    </div>
+                </div>
+                <div id="data-status" class="p-4 bg-white rounded-lg border border-gray-200">
+                    <div class="flex items-center">
+                        <div class="loading mr-3"></div>
+                        <div>
+                            <h3 class="font-semibold text-gray-900">Sample Data</h3>
+                            <p class="text-sm text-gray-600">Loading...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Metrics -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Total Content</p>
+                        <p class="text-2xl font-bold text-gray-900" id="total-content">
+                            <div class="loading"></div>
+                        </p>
+                    </div>
+                    <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <span class="text-sm text-blue-600">From DuckDB</span>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Movies</p>
+                        <p class="text-2xl font-bold text-gray-900" id="total-movies">
+                            <div class="loading"></div>
+                        </p>
+                    </div>
+                    <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <span class="text-sm text-blue-600">Live Query</span>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">TV Shows</p>
+                        <p class="text-2xl font-bold text-gray-900" id="total-shows">
+                            <div class="loading"></div>
+                        </p>
+                    </div>
+                    <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <span class="text-sm text-blue-600">Real-time</span>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Avg IMDB Score</p>
+                        <p class="text-2xl font-bold text-gray-900" id="avg-imdb-score">
+                            <div class="loading"></div>
+                        </p>
+                    </div>
+                    <div class="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <span class="text-sm text-blue-600">SQL Count</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Charts Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Sales by Category -->
+            <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-lg font-semibold text-gray-900">Sales by Category</h3>
+                    <div class="text-sm text-green-600 font-medium">Live DuckDB</div>
+                </div>
+                <div id="category-chart-container" style="height: 300px;">
+                    <div class="flex items-center justify-center h-full">
+                        <div class="text-center">
+                            <div class="loading mb-2"></div>
+                            <p class="text-gray-600">Loading data from DuckDB...</p>
+                        </div>
+                    </div>
+                </div>
+                <canvas id="categoryChart" style="display: none;"></canvas>
+            </div>
+
+            <!-- Monthly Trends -->
+            <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-lg font-semibold text-gray-900">Monthly Sales Trends</h3>
+                    <div class="text-sm text-green-600 font-medium">Real-time SQL</div>
+                </div>
+                <div id="trends-chart-container" style="height: 300px;">
+                    <div class="flex items-center justify-center h-full">
+                        <div class="text-center">
+                            <div class="loading mb-2"></div>
+                            <p class="text-gray-600">Executing query...</p>
+                        </div>
+                    </div>
+                </div>
+                <canvas id="trendsChart" style="display: none;"></canvas>
+            </div>
+
+            <!-- Top Products -->
+            <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-lg font-semibold text-gray-900">Top Products</h3>
+                    <div class="text-sm text-green-600 font-medium">Live Analytics</div>
+                </div>
+                <div id="products-chart-container" style="height: 300px;">
+                    <div class="flex items-center justify-center h-full">
+                        <div class="text-center">
+                            <div class="loading mb-2"></div>
+                            <p class="text-gray-600">Analyzing products...</p>
+                        </div>
+                    </div>
+                </div>
+                <canvas id="productsChart" style="display: none;"></canvas>
+            </div>
+
+            <!-- Geographic Distribution -->
+            <div class="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-lg font-semibold text-gray-900">Sales by State</h3>
+                    <div class="text-sm text-green-600 font-medium">Geographic Query</div>
+                </div>
+                <div id="geo-chart-container" style="height: 300px;">
+                    <div class="flex items-center justify-center h-full">
+                        <div class="text-center">
+                            <div class="loading mb-2"></div>
+                            <p class="text-gray-600">Loading geographic data...</p>
+                        </div>
+                    </div>
+                </div>
+                <canvas id="geoChart" style="display: none;"></canvas>
+            </div>
+        </div>
+
+        <!-- SQL Query Log -->
+        <div class="mt-12">
+            <h3 class="text-2xl font-bold text-gray-900 mb-6">Live SQL Query Log</h3>
+            <div class="bg-gray-900 rounded-lg p-6 overflow-hidden">
+                <div class="text-green-400 text-sm font-mono mb-4">📋 Executed Queries:</div>
+                <div id="query-log" class="text-gray-300 text-sm font-mono space-y-2 max-h-64 overflow-y-auto">
+                    <div class="text-yellow-400">🔄 Initializing connection to DuckDB...</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Configuration
+        const API_BASE = 'http://localhost:3001'; // Netflix Analytics API
+        const DATA_SOURCE_ID = 'netflix-duckdb';
+        
+        let charts = {};
+        let queryLog = [];
+
+        // API Helper
+        async function executeQuery(sql, description = '') {
+            try {
+                addToQueryLog(`📤 ${description || 'Executing query'}: ${sql.substring(0, 80)}...`);
+                
+                const response = await fetch(`${API_BASE}/api/query`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        dataSourceId: DATA_SOURCE_ID,
+                        sql: sql,
+                        useCache: true
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status}`);
+                }
+
+                const result = await response.json();
+                addToQueryLog(`✅ Query completed in ${result.metadata.executionTime}ms, ${result.rows.length} rows`);
+                return result;
+
+            } catch (error) {
+                addToQueryLog(`❌ Query failed: ${error.message}`);
+                throw error;
+            }
+        }
+
+        // Query Log
+        function addToQueryLog(message) {
+            queryLog.push(`[${new Date().toLocaleTimeString()}] ${message}`);
+            if (queryLog.length > 10) queryLog.shift(); // Keep last 10 entries
+            
+            const logElement = document.getElementById('query-log');
+            logElement.innerHTML = queryLog.map(log => `<div>${log}</div>`).join('');
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        // Status Updates
+        function updateServiceStatus(serviceId, status, message) {
+            const element = document.getElementById(serviceId);
+            const statusIcon = element.querySelector('.loading');
+            const statusText = element.querySelector('p');
+            
+            if (status === 'connected') {
+                statusIcon.innerHTML = '<div class="w-3 h-3 bg-green-500 rounded-full"></div>';
+                statusText.textContent = message || 'Connected';
+                element.className = element.className.replace('border-gray-200', 'border-green-200 bg-green-50');
+            } else if (status === 'error') {
+                statusIcon.innerHTML = '<div class="w-3 h-3 bg-red-500 rounded-full"></div>';
+                statusText.textContent = message || 'Error';
+                element.className = element.className.replace('border-gray-200', 'border-red-200 bg-red-50');
+            }
+        }
+
+        // Load Live Metrics
+        async function loadMetrics() {
+            try {
+                const metricsQuery = `
+                    SELECT 
+                        COUNT(*) as total_orders,
+                        SUM(total_amount) as total_revenue,
+                        AVG(total_amount) as avg_order_value,
+                        COUNT(DISTINCT customer_id) as active_customers
+                    FROM ecommerce_sales
+                `;
+
+                const result = await executeQuery(metricsQuery, 'Loading main metrics');
+                const metrics = result.rows[0];
+
+                document.getElementById('total-revenue').textContent = 
+                    '$' + Number(metrics.total_revenue).toLocaleString(undefined, {minimumFractionDigits: 2});
+                document.getElementById('total-orders').textContent = 
+                    Number(metrics.total_orders).toLocaleString();
+                document.getElementById('avg-order-value').textContent = 
+                    '$' + Number(metrics.avg_order_value).toFixed(2);
+                document.getElementById('active-customers').textContent = 
+                    Number(metrics.active_customers).toLocaleString();
+
+            } catch (error) {
+                console.error('Failed to load metrics:', error);
+                ['total-revenue', 'total-orders', 'avg-order-value', 'active-customers'].forEach(id => {
+                    document.getElementById(id).innerHTML = '<span class="text-red-600">Error</span>';
+                });
+            }
+        }
+
+        // Load Category Chart
+        async function loadCategoryChart() {
+            try {
+                const categoryQuery = `
+                    SELECT 
+                        product_category,
+                        COUNT(*) as order_count,
+                        SUM(total_amount) as total_revenue
+                    FROM ecommerce_sales 
+                    GROUP BY product_category 
+                    ORDER BY total_revenue DESC
+                `;
+
+                const result = await executeQuery(categoryQuery, 'Loading category data');
+                
+                const ctx = document.getElementById('categoryChart').getContext('2d');
+                charts.category = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: result.rows.map(row => row.product_category),
+                        datasets: [{
+                            data: result.rows.map(row => row.total_revenue),
+                            backgroundColor: [
+                                '#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', 
+                                '#ef4444', '#ec4899', '#6366f1', '#8b5a3c'
+                            ],
+                            borderWidth: 2,
+                            borderColor: '#ffffff'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        }
+                    }
+                });
+
+                document.getElementById('category-chart-container').style.display = 'none';
+                document.getElementById('categoryChart').style.display = 'block';
+
+            } catch (error) {
+                console.error('Failed to load category chart:', error);
+                document.getElementById('category-chart-container').innerHTML = 
+                    '<div class="error-state">Failed to load category data</div>';
+            }
+        }
+
+        // Load Trends Chart
+        async function loadTrendsChart() {
+            try {
+                const trendsQuery = `
+                    SELECT 
+                        strftime(order_date, '%Y-%m') as month,
+                        COUNT(*) as orders,
+                        SUM(total_amount) as revenue
+                    FROM ecommerce_sales 
+                    GROUP BY strftime(order_date, '%Y-%m')
+                    ORDER BY month
+                `;
+
+                const result = await executeQuery(trendsQuery, 'Loading monthly trends');
+                
+                const ctx = document.getElementById('trendsChart').getContext('2d');
+                charts.trends = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: result.rows.map(row => row.month),
+                        datasets: [{
+                            label: 'Revenue',
+                            data: result.rows.map(row => row.revenue),
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: function(value) {
+                                        return '$' + value.toLocaleString()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+
+                document.getElementById('trends-chart-container').style.display = 'none';
+                document.getElementById('trendsChart').style.display = 'block';
+
+            } catch (error) {
+                console.error('Failed to load trends chart:', error);
+                document.getElementById('trends-chart-container').innerHTML = 
+                    '<div class="error-state">Failed to load trends data</div>';
+            }
+        }
+
+        // Load Products Chart
+        async function loadProductsChart() {
+            try {
+                const productsQuery = `
+                    SELECT 
+                        product_name,
+                        COUNT(*) as order_count,
+                        SUM(total_amount) as total_revenue
+                    FROM ecommerce_sales 
+                    GROUP BY product_name 
+                    ORDER BY total_revenue DESC
+                    LIMIT 10
+                `;
+
+                const result = await executeQuery(productsQuery, 'Loading top products');
+                
+                const ctx = document.getElementById('productsChart').getContext('2d');
+                charts.products = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: result.rows.map(row => row.product_name),
+                        datasets: [{
+                            label: 'Revenue',
+                            data: result.rows.map(row => row.total_revenue),
+                            backgroundColor: '#10b981',
+                            borderRadius: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: function(value) {
+                                        return '$' + value.toLocaleString()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+
+                document.getElementById('products-chart-container').style.display = 'none';
+                document.getElementById('productsChart').style.display = 'block';
+
+            } catch (error) {
+                console.error('Failed to load products chart:', error);
+                document.getElementById('products-chart-container').innerHTML = 
+                    '<div class="error-state">Failed to load products data</div>';
+            }
+        }
+
+        // Load Geographic Chart
+        async function loadGeoChart() {
+            try {
+                const geoQuery = `
+                    SELECT 
+                        customer_state,
+                        COUNT(*) as order_count,
+                        SUM(total_amount) as total_revenue
+                    FROM ecommerce_sales 
+                    GROUP BY customer_state 
+                    ORDER BY total_revenue DESC
+                    LIMIT 15
+                `;
+
+                const result = await executeQuery(geoQuery, 'Loading geographic data');
+                
+                const ctx = document.getElementById('geoChart').getContext('2d');
+                charts.geo = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: result.rows.map(row => row.customer_state),
+                        datasets: [{
+                            label: 'Revenue by State',
+                            data: result.rows.map(row => row.total_revenue),
+                            backgroundColor: '#8b5cf6',
+                            borderRadius: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: 'y',
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            x: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: function(value) {
+                                        return '$' + value.toLocaleString()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+
+                document.getElementById('geo-chart-container').style.display = 'none';
+                document.getElementById('geoChart').style.display = 'block';
+
+            } catch (error) {
+                console.error('Failed to load geo chart:', error);
+                document.getElementById('geo-chart-container').innerHTML = 
+                    '<div class="error-state">Failed to load geographic data</div>';
+            }
+        }
+
+        // Check Services Health
+        async function checkServicesHealth() {
+            try {
+                // Check Query Engine
+                const healthResponse = await fetch(`${API_BASE}/health`);
+                if (healthResponse.ok) {
+                    updateServiceStatus('query-service-status', 'connected', 'Query Engine Online');
+                    
+                    // Check DuckDB specifically
+                    const duckdbHealthResponse = await fetch(`${API_BASE}/api/health`);
+                    const healthData = await duckdbHealthResponse.json();
+                    
+                    if (healthData[DATA_SOURCE_ID] && healthData[DATA_SOURCE_ID].status === 'healthy') {
+                        updateServiceStatus('duckdb-status', 'connected', 'DuckDB Connected');
+                        updateServiceStatus('data-status', 'connected', 'Data Available');
+                        return true;
+                    } else {
+                        updateServiceStatus('duckdb-status', 'error', 'DuckDB Error');
+                        return false;
+                    }
+                } else {
+                    throw new Error('Service unavailable');
+                }
+            } catch (error) {
+                updateServiceStatus('query-service-status', 'error', 'Service Offline');
+                updateServiceStatus('duckdb-status', 'error', 'Cannot Connect');
+                updateServiceStatus('data-status', 'error', 'No Data');
+                
+                // Update connection status
+                document.getElementById('connection-status').innerHTML = 
+                    '<div class="w-2 h-2 bg-red-500 rounded-full mr-2"></div><span class="text-red-600">Services Offline</span>';
+                
+                return false;
+            }
+        }
+
+        // Initialize Dashboard
+        async function initializeDashboard() {
+            addToQueryLog('🚀 Starting live dashboard initialization...');
+            
+            // Check if services are running
+            const servicesHealthy = await checkServicesHealth();
+            
+            if (!servicesHealthy) {
+                addToQueryLog('❌ Services not available. Please start the backend services.');
+                document.getElementById('connection-status').innerHTML = 
+                    '<div class="w-2 h-2 bg-red-500 rounded-full mr-2"></div><span class="text-red-600">Start services with: npm run dev:query</span>';
+                return;
+            }
+
+            // Update connection status
+            document.getElementById('connection-status').innerHTML = 
+                '<div class="w-2 h-2 bg-green-500 rounded-full mr-2"></div><span class="text-green-600">All Services Online</span>';
+            
+            // Enable refresh button
+            document.getElementById('refresh-btn').disabled = false;
+
+            // Load all data
+            try {
+                addToQueryLog('📊 Loading live dashboard data...');
+                
+                await Promise.all([
+                    loadMetrics(),
+                    loadCategoryChart(),
+                    loadTrendsChart(),
+                    loadProductsChart(),
+                    loadGeoChart()
+                ]);
+
+                addToQueryLog('🎉 Live dashboard loaded successfully!');
+                
+            } catch (error) {
+                addToQueryLog(`❌ Failed to load dashboard: ${error.message}`);
+            }
+        }
+
+        // Refresh Data
+        async function refreshData() {
+            addToQueryLog('🔄 Refreshing all dashboard data...');
+            
+            // Clear existing charts
+            Object.values(charts).forEach(chart => chart.destroy());
+            charts = {};
+            
+            // Reset loading states
+            ['category-chart-container', 'trends-chart-container', 'products-chart-container', 'geo-chart-container'].forEach(id => {
+                const container = document.getElementById(id);
+                container.style.display = 'flex';
+                container.innerHTML = `
+                    <div class="flex items-center justify-center h-full w-full">
+                        <div class="text-center">
+                            <div class="loading mb-2"></div>
+                            <p class="text-gray-600">Refreshing data...</p>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            ['categoryChart', 'trendsChart', 'productsChart', 'geoChart'].forEach(id => {
+                document.getElementById(id).style.display = 'none';
+            });
+
+            // Reload all data
+            await initializeDashboard();
+        }
+
+        // Event Listeners
+        document.getElementById('refresh-btn').addEventListener('click', refreshData);
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', initializeDashboard);
+    </script>
+</body>
+</html> 

@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DaaS Platform - Enhanced SDK Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <style>
+        .dashboard-container {
+            min-height: 400px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .chart-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+        }
+        
+        .chart-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.15);
+        }
+        
+        .metric-card {
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+        
+        .loading-shimmer {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+        
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        
+        .pulse-dot {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .gradient-text {
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .sdk-code {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            overflow-x: auto;
+        }
+        
+        .code-comment { color: #64748b; }
+        .code-keyword { color: #f59e0b; }
+        .code-string { color: #10b981; }
+        .code-function { color: #3b82f6; }
+        .code-variable { color: #8b5cf6; }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 to-blue-50 min-h-screen">
+    <!-- Header -->
+    <header class="bg-white/80 backdrop-blur-md border-b border-gray-200/50 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <svg class="w-8 h-8 text-blue-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                    <h1 class="text-xl font-bold gradient-text">DaaS Platform - SDK Demo</h1>
+                    <div class="ml-4 flex items-center">
+                        <div class="w-2 h-2 bg-green-500 rounded-full pulse-dot mr-2"></div>
+                        <span class="text-sm text-green-600 font-medium">Live Data</span>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button id="simulate-realtime" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200">
+                        Simulate Real-time
+                    </button>
+                    <button id="export-dashboard" class="border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200">
+                        Export Dashboard
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Hero Section -->
+        <div class="text-center mb-12">
+            <h2 class="text-4xl font-bold gradient-text mb-4">E-commerce Analytics Dashboard</h2>
+            <p class="text-xl text-gray-600 mb-6">Experience the power of embedded analytics with realistic e-commerce data</p>
+            <div class="inline-flex items-center bg-white/80 backdrop-blur-sm rounded-full px-6 py-3 border border-gray-200/50">
+                <span class="text-sm font-medium text-gray-700 mr-2">Powered by:</span>
+                <span class="text-sm font-bold text-blue-600">DaaS Platform SDK</span>
+            </div>
+        </div>
+
+        <!-- Real-time Metrics -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="metric-card">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Total Revenue</p>
+                        <p class="text-3xl font-bold text-gray-900" id="total-revenue">$0</p>
+                    </div>
+                    <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                        <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="flex items-center">
+                    <span class="text-sm text-green-600 font-medium" id="revenue-change">+12.5%</span>
+                    <span class="text-sm text-gray-500 ml-2">vs last month</span>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Total Orders</p>
+                        <p class="text-3xl font-bold text-gray-900" id="total-orders">0</p>
+                    </div>
+                    <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                        <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="flex items-center">
+                    <span class="text-sm text-green-600 font-medium" id="orders-change">+8.2%</span>
+                    <span class="text-sm text-gray-500 ml-2">vs last month</span>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Avg Order Value</p>
+                        <p class="text-3xl font-bold text-gray-900" id="avg-order-value">$0</p>
+                    </div>
+                    <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                        <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="flex items-center">
+                    <span class="text-sm text-green-600 font-medium" id="aov-change">+2.1%</span>
+                    <span class="text-sm text-gray-500 ml-2">vs last month</span>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Active Customers</p>
+                        <p class="text-3xl font-bold text-gray-900" id="active-customers">0</p>
+                    </div>
+                    <div class="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
+                        <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="flex items-center">
+                    <span class="text-sm text-green-600 font-medium" id="customers-change">+15.3%</span>
+                    <span class="text-sm text-gray-500 ml-2">vs last month</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+            <!-- Sales by Category -->
+            <div class="chart-card">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold text-gray-900">Sales by Category</h3>
+                    <div class="flex items-center">
+                        <div class="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
+                        <span class="text-sm text-gray-600">Real-time SQL</span>
+                    </div>
+                </div>
+                <div style="height: 350px;">
+                    <canvas id="categoryChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Revenue Trends -->
+            <div class="chart-card">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold text-gray-900">Revenue Trends</h3>
+                    <div class="flex items-center">
+                        <div class="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                        <span class="text-sm text-gray-600">Time Series</span>
+                    </div>
+                </div>
+                <div style="height: 350px;">
+                    <canvas id="revenueChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Customer Demographics -->
+            <div class="chart-card">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold text-gray-900">Customer Age Distribution</h3>
+                    <div class="flex items-center">
+                        <div class="w-2 h-2 bg-purple-500 rounded-full mr-2"></div>
+                        <span class="text-sm text-gray-600">Demographics</span>
+                    </div>
+                </div>
+                <div style="height: 350px;">
+                    <canvas id="demographicsChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Geographic Distribution -->
+            <div class="chart-card">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold text-gray-900">Sales by State</h3>
+                    <div class="flex items-center">
+                        <div class="w-2 h-2 bg-orange-500 rounded-full mr-2"></div>
+                        <span class="text-sm text-gray-600">Geographic</span>
+                    </div>
+                </div>
+                <div style="height: 350px;">
+                    <canvas id="geoChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Embedded Dashboard Showcase -->
+        <div class="mb-12">
+            <h3 class="text-3xl font-bold gradient-text mb-8 text-center">Live Embedded Dashboard</h3>
+            <div class="bg-white/80 backdrop-blur-sm rounded-2xl border border-gray-200/50 overflow-hidden shadow-xl">
+                <!-- Mock Browser Frame -->
+                <div class="bg-gray-100 px-6 py-4 border-b border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <div class="flex space-x-2">
+                                <div class="w-3 h-3 bg-red-500 rounded-full"></div>
+                                <div class="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                                <div class="w-3 h-3 bg-green-500 rounded-full"></div>
+                            </div>
+                            <span class="ml-4 text-sm text-gray-600 font-mono">https://customer-app.com/analytics</span>
+                        </div>
+                        <div class="text-sm text-blue-600 font-medium">🔒 Secure Embed</div>
+                    </div>
+                </div>
+                
+                <!-- Embedded Dashboard Container -->
+                <div class="p-8">
+                    <div id="embedded-dashboard" class="dashboard-container">
+                        <div class="text-center p-12">
+                            <div class="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                                </svg>
+                            </div>
+                            <h4 class="text-2xl font-bold text-gray-900 mb-3">Dashboard Ready for Embedding</h4>
+                            <p class="text-gray-600 mb-6 max-w-md mx-auto">Experience how seamlessly our analytics integrate into any application</p>
+                            <button id="load-embedded-dashboard" class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-8 py-4 rounded-xl font-semibold transition-all duration-200 transform hover:scale-105">
+                                🚀 Load Embedded Dashboard
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SDK Integration Code -->
+        <div class="mb-12">
+            <h3 class="text-3xl font-bold gradient-text mb-8 text-center">SDK Integration</h3>
+            <div class="bg-white/80 backdrop-blur-sm rounded-2xl border border-gray-200/50 overflow-hidden shadow-xl">
+                <div class="bg-gray-900 px-6 py-4 flex items-center justify-between">
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
+                        <div class="w-3 h-3 bg-yellow-500 rounded-full mr-2"></div>
+                        <div class="w-3 h-3 bg-green-500 rounded-full mr-6"></div>
+                        <span class="text-gray-400 text-sm font-mono">dashboard-integration.ts</span>
+                    </div>
+                    <button id="copy-code" class="text-gray-400 hover:text-white text-sm flex items-center">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                        </svg>
+                        Copy Code
+                    </button>
+                </div>
+                <div class="sdk-code text-gray-300">
+<span class="code-comment">// Install the DaaS Platform SDK</span>
+<span class="code-keyword">npm install</span> <span class="code-string">@daas/embedded-analytics</span>
+
+<span class="code-comment">// Import and initialize the SDK</span>
+<span class="code-keyword">import</span> { <span class="code-function">createEmbeddedDashboard</span> } <span class="code-keyword">from</span> <span class="code-string">'@daas/embedded-analytics'</span>
+
+<span class="code-comment">// Configure your embedded dashboard</span>
+<span class="code-keyword">const</span> <span class="code-variable">dashboard</span> = <span class="code-keyword">await</span> <span class="code-function">createEmbeddedDashboard</span>({
+  <span class="code-variable">apiUrl</span>: <span class="code-string">'https://api.daas-platform.com'</span>,
+  <span class="code-variable">token</span>: <span class="code-string">'your-secure-jwt-token'</span>,
+  <span class="code-variable">dashboardId</span>: <span class="code-string">'ecommerce-analytics'</span>,
+  <span class="code-variable">container</span>: <span class="code-string">'#analytics-container'</span>,
+  
+  <span class="code-comment">// Customize appearance</span>
+  <span class="code-variable">theme</span>: {
+    <span class="code-variable">primaryColor</span>: <span class="code-string">'#3b82f6'</span>,
+    <span class="code-variable">backgroundColor</span>: <span class="code-string">'#ffffff'</span>,
+    <span class="code-variable">fontFamily</span>: <span class="code-string">'Inter, sans-serif'</span>
+  },
+  
+  <span class="code-comment">// Handle events</span>
+  <span class="code-variable">onLoad</span>: () => <span class="code-function">console.log</span>(<span class="code-string">'Dashboard loaded successfully!'</span>),
+  <span class="code-variable">onError</span>: (<span class="code-variable">error</span>) => <span class="code-function">console.error</span>(<span class="code-string">'Dashboard error:'</span>, <span class="code-variable">error</span>),
+  <span class="code-variable">onFilterChange</span>: (<span class="code-variable">filters</span>) => <span class="code-function">console.log</span>(<span class="code-string">'Filters applied:'</span>, <span class="code-variable">filters</span>)
+})
+
+<span class="code-comment">// Programmatic control</span>
+<span class="code-keyword">await</span> <span class="code-variable">dashboard</span>.<span class="code-function">setFilters</span>({ 
+  <span class="code-variable">dateRange</span>: <span class="code-string">'last-30-days'</span>,
+  <span class="code-variable">category</span>: <span class="code-string">'Electronics'</span> 
+})
+
+<span class="code-keyword">await</span> <span class="code-variable">dashboard</span>.<span class="code-function">refresh</span>()
+<span class="code-keyword">const</span> <span class="code-variable">pdfData</span> = <span class="code-keyword">await</span> <span class="code-variable">dashboard</span>.<span class="code-function">exportToPDF</span>()
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Enhanced realistic e-commerce data
+        const generateRealisticData = () => {
+            const categories = ['Electronics', 'Books', 'Clothing', 'Home & Garden', 'Sports', 'Beauty', 'Automotive', 'Toys'];
+            const categoryRevenue = {
+                'Electronics': 185420,
+                'Clothing': 142380,
+                'Home & Garden': 98750,
+                'Sports': 87650,
+                'Books': 65430,
+                'Beauty': 54280,
+                'Automotive': 43920,
+                'Toys': 32160
+            };
+
+            const states = ['CA', 'NY', 'TX', 'FL', 'WA', 'IL', 'PA', 'OH', 'GA', 'NC'];
+            const stateRevenue = [165000, 142000, 128000, 95000, 87000, 76000, 68000, 59000, 52000, 45000];
+
+            const ageGroups = ['18-25', '26-35', '36-45', '46-55', '56+'];
+            const ageDistribution = [18, 32, 28, 15, 7]; // percentages
+
+            const monthlyData = [];
+            const baseDate = new Date('2024-01-01');
+            for (let i = 0; i < 12; i++) {
+                const date = new Date(baseDate);
+                date.setMonth(i);
+                const seasonality = 1 + 0.3 * Math.sin((i / 12) * 2 * Math.PI + Math.PI/2); // Peak in Dec
+                const baseRevenue = 45000 + Math.random() * 10000;
+                monthlyData.push({
+                    month: date.toLocaleDateString('en-US', { month: 'short' }),
+                    revenue: Math.round(baseRevenue * seasonality),
+                    orders: Math.round((baseRevenue * seasonality) / 155) // ~$155 AOV
+                });
+            }
+
+            return {
+                metrics: {
+                    totalRevenue: 709990,
+                    totalOrders: 4580,
+                    avgOrderValue: 155.02,
+                    activeCustomers: 2341
+                },
+                categories: categories.map(cat => ({
+                    name: cat,
+                    revenue: categoryRevenue[cat] + (Math.random() - 0.5) * 10000
+                })),
+                states: states.map((state, i) => ({
+                    state,
+                    revenue: stateRevenue[i] + (Math.random() - 0.5) * 5000
+                })),
+                ageGroups: ageGroups.map((group, i) => ({
+                    group,
+                    percentage: ageDistribution[i] + (Math.random() - 0.5) * 3
+                })),
+                monthlyTrends: monthlyData
+            };
+        };
+
+        let currentData = generateRealisticData();
+        let charts = {};
+        let isRealTimeActive = false;
+
+        // Update metrics display
+        function updateMetrics(data = currentData) {
+            document.getElementById('total-revenue').textContent = 
+                '$' + data.metrics.totalRevenue.toLocaleString();
+            document.getElementById('total-orders').textContent = 
+                data.metrics.totalOrders.toLocaleString();
+            document.getElementById('avg-order-value').textContent = 
+                '$' + data.metrics.avgOrderValue.toFixed(2);
+            document.getElementById('active-customers').textContent = 
+                data.metrics.activeCustomers.toLocaleString();
+
+            // Animate the changes
+            const changeElements = ['revenue-change', 'orders-change', 'aov-change', 'customers-change'];
+            changeElements.forEach(id => {
+                const element = document.getElementById(id);
+                const currentValue = parseFloat(element.textContent.replace('%', ''));
+                const newValue = currentValue + (Math.random() - 0.5) * 2;
+                element.textContent = (newValue > 0 ? '+' : '') + newValue.toFixed(1) + '%';
+                element.className = newValue > 0 ? 'text-sm text-green-600 font-medium' : 'text-sm text-red-600 font-medium';
+            });
+        }
+
+        // Create enhanced charts
+        function createCharts(data = currentData) {
+            // Sales by Category (Enhanced Doughnut)
+            const categoryCtx = document.getElementById('categoryChart').getContext('2d');
+            if (charts.category) charts.category.destroy();
+            charts.category = new Chart(categoryCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: data.categories.map(c => c.name),
+                    datasets: [{
+                        data: data.categories.map(c => c.revenue),
+                        backgroundColor: [
+                            '#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', 
+                            '#ef4444', '#ec4899', '#6366f1', '#84cc16'
+                        ],
+                        borderWidth: 3,
+                        borderColor: '#ffffff',
+                        hoverBorderWidth: 5,
+                        hoverBorderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 20,
+                                usePointStyle: true,
+                                font: { size: 12 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((context.raw / total) * 100).toFixed(1);
+                                    return `${context.label}: $${context.raw.toLocaleString()} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    },
+                    animation: {
+                        animateRotate: true,
+                        duration: 1000
+                    }
+                }
+            });
+
+            // Revenue Trends (Enhanced Line Chart)
+            const revenueCtx = document.getElementById('revenueChart').getContext('2d');
+            if (charts.revenue) charts.revenue.destroy();
+            charts.revenue = new Chart(revenueCtx, {
+                type: 'line',
+                data: {
+                    labels: data.monthlyTrends.map(t => t.month),
+                    datasets: [{
+                        label: 'Revenue',
+                        data: data.monthlyTrends.map(t => t.revenue),
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#ffffff',
+                        pointBorderColor: '#3b82f6',
+                        pointBorderWidth: 3,
+                        pointRadius: 6,
+                        pointHoverRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: '#ffffff',
+                            bodyColor: '#ffffff',
+                            borderColor: '#3b82f6',
+                            borderWidth: 1
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + (value / 1000) + 'K';
+                                }
+                            }
+                        },
+                        x: {
+                            grid: { display: false }
+                        }
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    }
+                }
+            });
+
+            // Customer Demographics (Bar Chart)
+            const demographicsCtx = document.getElementById('demographicsChart').getContext('2d');
+            if (charts.demographics) charts.demographics.destroy();
+            charts.demographics = new Chart(demographicsCtx, {
+                type: 'bar',
+                data: {
+                    labels: data.ageGroups.map(g => g.group),
+                    datasets: [{
+                        label: 'Customer Distribution',
+                        data: data.ageGroups.map(g => g.percentage),
+                        backgroundColor: 'rgba(139, 92, 246, 0.8)',
+                        borderColor: '#8b5cf6',
+                        borderWidth: 2,
+                        borderRadius: 8,
+                        borderSkipped: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.raw.toFixed(1)}% of customers`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        },
+                        x: {
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+
+            // Geographic Distribution (Horizontal Bar)
+            const geoCtx = document.getElementById('geoChart').getContext('2d');
+            if (charts.geo) charts.geo.destroy();
+            charts.geo = new Chart(geoCtx, {
+                type: 'bar',
+                data: {
+                    labels: data.states.map(s => s.state),
+                    datasets: [{
+                        label: 'Revenue by State',
+                        data: data.states.map(s => s.revenue),
+                        backgroundColor: 'rgba(249, 115, 22, 0.8)',
+                        borderColor: '#f97316',
+                        borderWidth: 2,
+                        borderRadius: 8,
+                        borderSkipped: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.label}: $${context.raw.toLocaleString()}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + (value / 1000) + 'K';
+                                }
+                            }
+                        },
+                        y: {
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Simulate real-time updates
+        function startRealTimeSimulation() {
+            if (isRealTimeActive) {
+                clearInterval(window.realTimeInterval);
+                isRealTimeActive = false;
+                document.getElementById('simulate-realtime').textContent = 'Simulate Real-time';
+                document.getElementById('simulate-realtime').className = 'bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200';
+                return;
+            }
+
+            isRealTimeActive = true;
+            document.getElementById('simulate-realtime').textContent = 'Stop Simulation';
+            document.getElementById('simulate-realtime').className = 'bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200';
+
+            window.realTimeInterval = setInterval(() => {
+                // Generate small updates to the data
+                currentData = generateRealisticData();
+                updateMetrics(currentData);
+                createCharts(currentData);
+            }, 3000);
+        }
+
+        // Load embedded dashboard
+        function loadEmbeddedDashboard() {
+            const container = document.getElementById('embedded-dashboard');
+            container.innerHTML = `
+                <div class="p-8">
+                    <div class="flex items-center justify-between mb-8">
+                        <h4 class="text-2xl font-bold gradient-text">Embedded Analytics Dashboard</h4>
+                        <div class="flex items-center space-x-3">
+                            <div class="flex items-center">
+                                <div class="w-2 h-2 bg-green-500 rounded-full pulse-dot mr-2"></div>
+                                <span class="text-sm text-gray-600">Live Data Connection</span>
+                            </div>
+                            <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs font-semibold">
+                                Embedded via SDK
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                        <div class="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-xl border border-blue-200">
+                            <div class="flex items-center justify-between mb-2">
+                                <h5 class="text-sm font-semibold text-blue-800">Total Sales</h5>
+                                <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                                </svg>
+                            </div>
+                            <p class="text-3xl font-bold text-blue-900">$710K</p>
+                            <p class="text-sm text-blue-600 mt-1">↗ +12.5% vs last month</p>
+                        </div>
+                        
+                        <div class="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-xl border border-green-200">
+                            <div class="flex items-center justify-between mb-2">
+                                <h5 class="text-sm font-semibold text-green-800">Orders</h5>
+                                <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path>
+                                </svg>
+                            </div>
+                            <p class="text-3xl font-bold text-green-900">4,580</p>
+                            <p class="text-sm text-green-600 mt-1">↗ +8.2% vs last month</p>
+                        </div>
+                        
+                        <div class="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-xl border border-purple-200">
+                            <div class="flex items-center justify-between mb-2">
+                                <h5 class="text-sm font-semibold text-purple-800">Customers</h5>
+                                <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
+                                </svg>
+                            </div>
+                            <p class="text-3xl font-bold text-purple-900">2,341</p>
+                            <p class="text-sm text-purple-600 mt-1">↗ +15.3% vs last month</p>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gradient-to-r from-blue-500 to-purple-600 text-white p-6 rounded-xl text-center">
+                        <div class="flex items-center justify-center mb-3">
+                            <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path>
+                            </svg>
+                            <span class="font-semibold">Dashboard Successfully Embedded!</span>
+                        </div>
+                        <p class="text-blue-100">This dashboard is now running inside your application using the DaaS Platform SDK. Fully interactive, secure, and customizable.</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Copy code to clipboard
+        function copyCodeToClipboard() {
+            const codeText = document.querySelector('.sdk-code').textContent;
+            navigator.clipboard.writeText(codeText).then(() => {
+                const button = document.getElementById('copy-code');
+                const originalText = button.innerHTML;
+                button.innerHTML = `
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    Copied!
+                `;
+                setTimeout(() => {
+                    button.innerHTML = originalText;
+                }, 2000);
+            });
+        }
+
+        // Event listeners
+        document.getElementById('simulate-realtime').addEventListener('click', startRealTimeSimulation);
+        document.getElementById('export-dashboard').addEventListener('click', () => {
+            alert('PDF export would be generated here! 📊\n\nIn the real implementation, this would:\n• Generate a PDF of the current dashboard\n• Include all charts and metrics\n• Apply custom branding');
+        });
+        document.getElementById('load-embedded-dashboard').addEventListener('click', loadEmbeddedDashboard);
+        document.getElementById('copy-code').addEventListener('click', copyCodeToClipboard);
+
+        // Initialize the demo
+        document.addEventListener('DOMContentLoaded', () => {
+            updateMetrics();
+            createCharts();
+            
+            // Add some subtle animations on load
+            const cards = document.querySelectorAll('.metric-card, .chart-card');
+            cards.forEach((card, index) => {
+                card.style.opacity = '0';
+                card.style.transform = 'translateY(20px)';
+                setTimeout(() => {
+                    card.style.transition = 'all 0.6s ease';
+                    card.style.opacity = '1';
+                    card.style.transform = 'translateY(0)';
+                }, index * 100);
+            });
+        });
+    </script>
+</body>
+</html>

@@ -21,7 +21,13 @@
     "docker:build": "docker build -t dashboard-service .",
     "docker:run": "docker run -p 3003:3003 dashboard-service"
   },
-  "keywords": ["dashboard", "widgets", "analytics", "crud", "fastify"],
+  "keywords": [
+    "dashboard",
+    "widgets",
+    "analytics",
+    "crud",
+    "fastify"
+  ],
   "author": "Platform Team",
   "license": "MIT",
   "dependencies": {
@@ -55,5 +61,9 @@
   },
   "engines": {
     "node": ">=20.0.0"
-  }
+  },
+  "directories": {
+    "test": "tests"
+  },
+  "type": "commonjs"
 }

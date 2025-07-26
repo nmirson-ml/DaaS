@@ -2,12 +2,13 @@ import { z } from 'zod'
 
 const configSchema = z.object({
   // Server
-  port: z.coerce.number().min(1).max(65535).default(3003),
+  port: z.coerce.number().min(1).max(65535).default(3013),
+  host: z.string().default('127.0.0.1'),
   nodeEnv: z.enum(['development', 'production', 'test']).default('development'),
   logLevel: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
 
   // Database
-  databaseUrl: z.string().url(),
+  databaseUrl: z.string().default('file:./dev.db'),
 
   // External Services
   authServiceUrl: z.string().url().default('http://localhost:3001'),
@@ -42,6 +43,7 @@ const parseConfig = (): Config => {
     return configSchema.parse({
       // Server
       port: process.env.PORT,
+      host: process.env.HOST,
       nodeEnv: process.env.NODE_ENV,
       logLevel: process.env.LOG_LEVEL,
 

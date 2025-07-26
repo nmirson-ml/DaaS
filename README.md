@@ -54,6 +54,15 @@ DaaS is a modern, TypeScript-first embedded analytics platform that enables deve
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+<img width="1403" height="678" alt="image" src="https://github.com/user-attachments/assets/13554300-3513-437b-a954-d22598f8d568" />
+
+
+<img width="1262" height="703" alt="image" src="https://github.com/user-attachments/assets/414f8ba8-4390-481d-8d84-72ba13b72ab1" />
+
+
+<img width="992" height="716" alt="image" src="https://github.com/user-attachments/assets/0ea28367-098c-4ecf-874f-74e75e291eaa" />
+
+
 ## 🛠️ Tech Stack
 
 ### Backend Services
